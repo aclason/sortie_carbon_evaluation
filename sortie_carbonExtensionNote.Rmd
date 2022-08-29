@@ -1,0 +1,165 @@
+---
+title: "SORTIE Carbon Extension Note"
+author: "Leah Walker"
+date: "2022-08-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(data.table)
+library(plyr)
+library(dplyr)
+library(xml2)
+library(stringr)
+library(tidyr)
+library(ggplot2)
+library(Rmisc)
+library(lme4)
+library(lmerTest)
+library(rsortie)
+
+source("./R/clean_summit_lake_data.R")
+source("./R/calc_field_BA.R")
+source("../Carbon/CarbonFunctions.R")
+source("../Carbon/AllometryFunctions.R")
+source("./R/calc_field_C.R")
+
+BA.function <- function(DBH) {pi*(DBH/200)^2}
+
+path_outputs <- "./Outputs/"
+
+```
+
+
+
+1. Set parameters
+- run makeFiles
+- run rsortie
+- clean field data
+- calculate carbon
+
+```{r}
+###################
+### Summit Lake ###
+###################
+
+
+
+##################
+### Date Creek ###
+##################
+
+
+
+```
+
+
+
+2. Read in data
+
+```{r}
+###################
+### Summit Lake ###
+###################
+
+# Field
+# Sortie
+
+
+
+##################
+### Date Creek ###
+##################
+
+# Field
+# Sortie
+
+
+
+```
+
+
+
+3. Live standing carbon
+```{r}
+###################
+### Summit Lake ###
+###################
+
+
+
+##################
+### Date Creek ###
+##################
+
+
+
+```
+
+
+
+4. Dead standing carbon
+```{r}
+###################
+### Summit Lake ###
+###################
+
+
+
+##################
+### Date Creek ###
+##################
+
+
+
+```
+
+
+
+5. Carbon by species
+```{r}
+###################
+### Summit Lake ###
+###################
+
+# Interior spruce
+# Subalpine fir
+
+
+
+##################
+### Date Creek ###
+##################
+
+# Western redcedar
+# Western hemlock
+
+
+
+```
+
+
+
+6. Coarse woody debris 
+```{r}
+###################
+### Summit Lake ###
+###################
+
+
+
+##################
+### Date Creek ###
+##################
+
+
+
+
+```
+
+
+
+
+
