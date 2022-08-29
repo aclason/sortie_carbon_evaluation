@@ -3,44 +3,52 @@ title: "SORTIE Carbon Extension Note"
 author: "Leah Walker"
 date: "2022-08-29"
 output: html_document
+editor_options: 
+  chunk_output_type: console
 ---
-
+Load libraries
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
-library(data.table)
-library(plyr)
-library(dplyr)
-library(xml2)
-library(stringr)
-library(tidyr)
-library(ggplot2)
-library(Rmisc)
-library(lme4)
-library(lmerTest)
-library(rsortie)
+ls <- c("tidyverse", "data.table") # Data Management and Manipulation (removed plyr - might need to add back)
+ls <- append(ls, c("rsortie")) # sortie
+ls <- append(ls, c("lme4", "lmerTest")) # analysis
+ls <- append(ls, c("ggplot2")) # model interpretation/visualization
 
-source("./R/clean_summit_lake_data.R")
-source("./R/calc_field_BA.R")
-source("../Carbon/CarbonFunctions.R")
-source("../Carbon/AllometryFunctions.R")
-source("./R/calc_field_C.R")
-
-BA.function <- function(DBH) {pi*(DBH/200)^2}
-
-path_outputs <- "./Outputs/"
+# Install if needed -- then load. 
+new.packages <- ls[!(ls %in% installed.packages()[,"Package"])]
+if(length(new.packages)) install.packages(new.packages)
+lapply(ls, library, character.only = TRUE)  # load the required packages
+rm(ls, new.packages)
 
 ```
 
 
 
 1. Set parameters
+- set pathways
+```{r}
+#Set pathways
+BA.function <- function(DBH) {pi*(DBH/200)^2}
+
+path_outputs <- "./Outputs/"
+
+
+```
+
 - run makeFiles
 - run rsortie
 - clean field data
 - calculate carbon
 
 ```{r}
+#I'm assuming we only need these scripts if you want to run all the calculations?
+source("./R/clean_summit_lake_data.R")
+source("./R/calc_field_BA.R")
+source("../Carbon/CarbonFunctions.R")
+source("../Carbon/AllometryFunctions.R")
+source("./R/calc_field_C.R")
+
 ###################
 ### Summit Lake ###
 ###################
