@@ -39,6 +39,8 @@ path_outputs <- "./Outputs/"
 - run rsortie
 - clean field data
 - calculate carbon
+- calculate field carbon
+- calculate field carbon by species
 
 ```{r}
 ###################
@@ -64,8 +66,44 @@ path_outputs <- "./Outputs/"
 ### Summit Lake ###
 ###################
 
-# Field
-# Sortie
+### Field ###
+# LIVE
+SL_field_L_C <- read.csv("./Outputs/csv/SummitLake_C_field_L.csv") # SL = Summit Lake, L = living, C = carbon
+
+# Live - Hybrid Spruce (Sx)
+SL_field_L_C_Sx <- read.csv("./Outputs/csv/SummitLake_C_field_L_Sx.csv")
+
+# Live - Subalpine fir (Bl)
+SL_field_L_C_Bl <- read.csv("./Outputs/csv/SummitLake_C_field_L_Bl.csv")
+
+
+
+# DEAD
+SL_field_D_C <- read.csv("./Outputs/csv/SummitLake_C_field_D.csv") # D = dead
+
+
+
+### Sortie ###
+
+#LIVE
+SL_L_C <- read.csv(paste0(path_outputs, "csv/SummitLake_C_0506_L.csv"))
+# This data frame will be used below to calculate carbon per species
+
+SL_L_C_u <- SL_L_C %>% # u = unit (this data frame is summarized to the unit level)
+  dplyr::select(unit, timestep, C_unit, treatment)
+
+SL_L_C_u <- as.data.table(unique(SL_L_C_u))
+
+
+
+# DEAD
+SL_D_C <- read.csv(paste0(path_outputs, "csv/SummitLake_C_0506_D.csv"))
+# This data frame will be used below to calculate carbon per species
+
+SL_D_C_u <- SL_D_C %>%
+  dplyr::select(unit, timestep, C_unit, treatment)
+
+SL_D_C_u <- as.data.table(unique(SL_D_C_u))
 
 
 
@@ -73,10 +111,62 @@ path_outputs <- "./Outputs/"
 ### Date Creek ###
 ##################
 
-# Field
-# Sortie
+### Field ###
+# LIVE
+DC_field_L_C <- read.csv(paste0(path_outputs, "csv/DateCreek_C_field_L.csv")) # DC = Date Creek, L = 
+
+# Live - Western red cedar (Cw)
+DC_field_L_C_Cw <- read.csv("./Outputs/csv/DateCreek_2018_field_C_unit_L_Cw.csv")
+
+# Live - Western hemlock (Hw)
+DC_field_L_C_Hw <- read.csv("./Outputs/csv/DateCreek_2018_field_C_unit_L_Hw.csv")
 
 
+
+# DEAD
+DC_field_D_C <- read.csv(paste0(path_outputs, "csv/DateCreek_C_field_D.csv")) # DC = Date Creek, L = 
+
+
+
+### Sortie ###
+
+# LIVE
+DC_L_C <- read.csv(paste0(path_outputs, "csv/DateCreek_C_L.csv")) # DC = Date Creek, L = living, C = carbon
+# This data frame will be used below to calculate carbon per species
+
+DC_L_C_p <- DC_L_C %>% # p = plot (this data frame is summarized to the plot level)
+  dplyr::select(timestep, Unit, PlotNumber, C_plot, Treatment) 
+
+DC_L_C_p <- unique(DC_L_C_p)
+
+DC_L_C_p <- DC_L_C_p %>% # u = unit
+  dplyr::group_by(timestep, Unit) %>% 
+  dplyr::mutate(C_unit = sum(C_plot, na.rm = TRUE)/count)
+
+DC_L_C_u <- DC_L_C_p %>% # u = unit
+  dplyr::select(timestep, Unit, C_unit, Treatment) 
+
+DC_L_C_u <- as.data.table(unique(DC_L_C_u))
+
+
+
+# DEAD
+DC_D_C <- read.csv(paste0(path_outputs, "csv/DateCreek_C_D.csv")) # DC = Date Creek, L = living, C = carbon
+# This data frame will be used below to calculate carbon per species
+
+DC_D_C_p <- DC_D_C %>% # p = plot (this data frame is summarized to the plot level)
+  dplyr::select(timestep, Unit, PlotNumber, C_plot, Treatment) 
+
+DC_D_C_p <- unique(DC_D_C_p)
+
+DC_D_C_p <- DC_D_C_p %>% # u = unit
+  dplyr::group_by(timestep, Unit) %>% 
+  dplyr::mutate(C_unit = sum(C_plot, na.rm = TRUE)/count)
+
+DC_D_C_u <- DC_D_C_p %>% # u = unit
+  dplyr::select(timestep, Unit, C_unit, Treatment) 
+
+DC_D_C_u <- as.data.table(unique(DC_D_C_u))
 
 ```
 
