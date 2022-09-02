@@ -113,18 +113,18 @@ SL_D_C_u <- as.data.table(unique(SL_D_C_u))
 
 ### Field ###
 # LIVE
-DC_field_L_C <- read.csv(paste0(path_outputs, "csv/DateCreek_C_field_L.csv")) # DC = Date Creek, L = 
+DC_field_L_C <- read.csv(paste0(path_outputs, "csv/DateCreek_C_field_L.csv")) # DC = Date Creek, L = living, C = carbon
 
 # Live - Western red cedar (Cw)
-DC_field_L_C_Cw <- read.csv("./Outputs/csv/DateCreek_2018_field_C_unit_L_Cw.csv")
+DC_field_L_C_Cw <- read.csv("./Outputs/csv/DateCreek_C_field_L_Cw.csv.csv")
 
 # Live - Western hemlock (Hw)
-DC_field_L_C_Hw <- read.csv("./Outputs/csv/DateCreek_2018_field_C_unit_L_Hw.csv")
+DC_field_L_C_Hw <- read.csv("./Outputs/csv/DateCreek_C_field_L_Hw.csv")
 
 
 
 # DEAD
-DC_field_D_C <- read.csv(paste0(path_outputs, "csv/DateCreek_C_field_D.csv")) # DC = Date Creek, L = 
+DC_field_D_C <- read.csv(paste0(path_outputs, "csv/DateCreek_C_field_D.csv"))
 
 
 
@@ -214,8 +214,39 @@ DC_D_C_u <- as.data.table(unique(DC_D_C_u))
 ### Summit Lake ###
 ###################
 
-# Interior spruce
-# Subalpine fir
+### Interior spruce ###
+
+# Subset for Spruce
+SL_L_C_Sx <- subset(SL_L_C, SL_L_C$Species == "Sx")
+
+# Recalculate C per unit for spruce only
+SL_L_C_Sx <- SL_L_C_Sx %>% 
+  group_by(timestep, unit) %>% 
+  mutate(C_unit = sum(C_tree, na.rm = TRUE))
+
+# Select desired columns
+SL_L_C_Sx <- SL_L_C_Sx %>%
+  dplyr::select(unit, timestep, C_unit, treatment)
+
+SL_L_C_Sx <- as.data.table(unique(SL_L_C_Sx))
+
+
+
+### Subalpine fir ###
+
+# Subset for Fir
+SL_L_C_Bl <- subset(SL_L_C, SL_L_C$Species == "Bl")
+
+# Recalculate C per unit for spruce only
+SL_L_C_Bl <- SL_L_C_Bl %>% 
+  group_by(timestep, unit) %>% 
+  mutate(C_unit = sum(C_tree, na.rm = TRUE))
+
+# Select desired columns
+SL_L_C_Bl <- SL_L_C_Bl %>%
+  dplyr::select(unit, timestep, C_unit, treatment)
+
+SL_L_C_Bl <- as.data.table(unique(SL_L_C_Bl))
 
 
 
@@ -223,9 +254,59 @@ DC_D_C_u <- as.data.table(unique(DC_D_C_u))
 ### Date Creek ###
 ##################
 
-# Western redcedar
-# Western hemlock
+### Western redcedar ###
 
+DC_L_C_Cw <- subset(DC_L_C, DC_L_C$Species == "Cw")
+
+# Recalculate C per unit for cedar only
+DC_L_C_Cw_p <- DC_L_C_Cw %>% 
+  group_by(timestep, Unit, PlotNumber) %>% 
+  mutate(C_plot = sum(C_tree, na.rm = TRUE))
+
+# Select desired columns
+DC_L_C_Cw_p <- DC_L_C_Cw_p %>% 
+  select(timestep, Unit, PlotNumber, C_plot, Treatment, count)
+
+DC_L_C_Cw_p <- unique(DC_L_C_Cw_p)
+
+# Calculate carbon per unit by averaging carbon per plot
+DC_L_C_Cw_u <- DC_L_C_Cw_p %>% 
+  group_by(timestep, Unit) %>% 
+  mutate(C_unit = sum(C_plot, na.rm = TRUE)/count)
+
+# Select desired columns
+DC_L_C_Cw_u <- DC_L_C_Cw_u %>% 
+  select(timestep, Unit, C_unit, Treatment)
+
+DC_L_C_Cw_u <- unique(DC_L_C_Cw_u)
+
+
+
+### Western hemlock ###
+
+DC_L_C_Hw <- subset(DC_L_C, DC_L_C$Species == "Hw")
+
+# Recalculate C per plot for hemlock only
+DC_L_C_Hw_p <- DC_L_C_Hw %>% 
+  group_by(timestep, Unit, PlotNumber) %>% 
+  mutate(C_plot = sum(C_tree, na.rm = TRUE))
+
+# Select desired columns
+DC_L_C_Hw_p <- DC_L_C_Hw_p %>% 
+  select(timestep, Unit, PlotNumber, C_plot, Treatment, count)
+
+DC_L_C_Hw_p <- unique(DC_L_C_Hw_p)
+
+# Calculate carbon per unit by averaging carbon per plot
+DC_L_C_Hw_u <- DC_L_C_Hw_p %>% 
+  group_by(timestep, Unit) %>% 
+  mutate(C_unit = sum(C_plot, na.rm = TRUE)/count)
+
+# Select desired columns
+DC_L_C_Hw_u <- DC_L_C_Hw_u %>% 
+  select(timestep, Unit, C_unit, Treatment)
+
+DC_L_C_Hw_u <- unique(DC_L_C_Hw_u)
 
 
 ```
