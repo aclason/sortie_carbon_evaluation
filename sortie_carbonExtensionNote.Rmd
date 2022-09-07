@@ -6,13 +6,14 @@ output: html_document
 editor_options: 
   chunk_output_type: console
 ---
+
 Load libraries
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 
 ls <- c("tidyverse", "data.table") # Data Management and Manipulation (removed plyr - might need to add back)
 ls <- append(ls, c("rsortie")) # sortie
-ls <- append(ls, c("lme4", "lmerTest")) # analysis
+ls <- append(ls, c("lme4", "lmerTest", Rmisc)) # analysis
 ls <- append(ls, c("ggplot2")) # model interpretation/visualization
 
 # Install if needed -- then load. 
@@ -29,10 +30,7 @@ rm(ls, new.packages)
 - set pathways
 ```{r}
 #Set pathways
-BA.function <- function(DBH) {pi*(DBH/200)^2}
-
 path_outputs <- "./Outputs/"
-
 
 ```
 
@@ -45,6 +43,8 @@ path_outputs <- "./Outputs/"
 
 ```{r}
 #I'm assuming we only need these scripts if you want to run all the calculations?
+BA.function <- function(DBH) {pi*(DBH/200)^2}
+
 source("./R/clean_summit_lake_data.R")
 source("./R/calc_field_BA.R")
 source("../Carbon/CarbonFunctions.R")
@@ -76,25 +76,25 @@ source("./R/calc_field_C.R")
 
 ### Field ###
 # LIVE
-SL_field_L_C <- read.csv("./Outputs/csv/SummitLake_C_field_L.csv") # SL = Summit Lake, L = living, C = carbon
+SL_field_L_C <- read.csv("./Inputs/Data/SummitLake_C_field_L.csv") # SL = Summit Lake, L = living, C = carbon
 
 # Live - Hybrid Spruce (Sx)
-SL_field_L_C_Sx <- read.csv("./Outputs/csv/SummitLake_C_field_L_Sx.csv")
+SL_field_L_C_Sx <- read.csv("./Inputs/Data/SummitLake_C_field_L_Sx.csv")
 
 # Live - Subalpine fir (Bl)
-SL_field_L_C_Bl <- read.csv("./Outputs/csv/SummitLake_C_field_L_Bl.csv")
+SL_field_L_C_Bl <- read.csv("./Inputs/Data/SummitLake_C_field_L_Bl.csv")
 
 
 
 # DEAD
-SL_field_D_C <- read.csv("./Outputs/csv/SummitLake_C_field_D.csv") # D = dead
+SL_field_D_C <- read.csv("./Inputs/Data/SummitLake_C_field_D.csv") # D = dead
 
 
 
 ### Sortie ###
 
 #LIVE
-SL_L_C <- read.csv(paste0(path_outputs, "csv/SummitLake_C_0506_L.csv"))
+SL_L_C <- read.csv("./Inputs/Data/SummitLake_C_0506_L.csv")
 # This data frame will be used below to calculate carbon per species
 
 SL_L_C_u <- SL_L_C %>% # u = unit (this data frame is summarized to the unit level)
@@ -105,7 +105,7 @@ SL_L_C_u <- as.data.table(unique(SL_L_C_u))
 
 
 # DEAD
-SL_D_C <- read.csv(paste0(path_outputs, "csv/SummitLake_C_0506_D.csv"))
+SL_D_C <- read.csv("./Inputs/Data/SummitLake_C_0506_D.csv")
 # This data frame will be used below to calculate carbon per species
 
 SL_D_C_u <- SL_D_C %>%
@@ -121,25 +121,25 @@ SL_D_C_u <- as.data.table(unique(SL_D_C_u))
 
 ### Field ###
 # LIVE
-DC_field_L_C <- read.csv(paste0(path_outputs, "csv/DateCreek_C_field_L.csv")) # DC = Date Creek, L = living, C = carbon
+DC_field_L_C <- read.csv("./Inputs/Data/DateCreek_C_field_L.csv") # DC = Date Creek, L = living, C = carbon
 
 # Live - Western red cedar (Cw)
-DC_field_L_C_Cw <- read.csv("./Outputs/csv/DateCreek_C_field_L_Cw.csv.csv")
+DC_field_L_C_Cw <- read.csv("./Inputs/Data/DateCreek_C_field_L_Cw.csv.csv")
 
 # Live - Western hemlock (Hw)
-DC_field_L_C_Hw <- read.csv("./Outputs/csv/DateCreek_C_field_L_Hw.csv")
+DC_field_L_C_Hw <- read.csv("./Inputs/Data/DateCreek_C_field_L_Hw.csv")
 
 
 
 # DEAD
-DC_field_D_C <- read.csv(paste0(path_outputs, "csv/DateCreek_C_field_D.csv"))
+DC_field_D_C <- read.csv( "./Inputs/Data/DateCreek_C_field_D.csv")
 
 
 
 ### Sortie ###
 
 # LIVE
-DC_L_C <- read.csv(paste0(path_outputs, "csv/DateCreek_C_L.csv")) # DC = Date Creek, L = living, C = carbon
+DC_L_C <- read.csv("./Inputs/Data/DateCreek_C_L.csv") # DC = Date Creek, L = living, C = carbon
 # This data frame will be used below to calculate carbon per species
 
 DC_L_C_p <- DC_L_C %>% # p = plot (this data frame is summarized to the plot level)
@@ -159,7 +159,7 @@ DC_L_C_u <- as.data.table(unique(DC_L_C_u))
 
 
 # DEAD
-DC_D_C <- read.csv(paste0(path_outputs, "csv/DateCreek_C_D.csv")) # DC = Date Creek, L = living, C = carbon
+DC_D_C <- read.csv("./Inputs/Data/DateCreek_C_D.csv") # DC = Date Creek, L = living, C = carbon
 # This data frame will be used below to calculate carbon per species
 
 DC_D_C_p <- DC_D_C %>% # p = plot (this data frame is summarized to the plot level)
@@ -185,6 +185,127 @@ DC_D_C_u <- as.data.table(unique(DC_D_C_u))
 ###################
 ### Summit Lake ###
 ###################
+
+### RSS and RMSE ###
+
+# Compare final year of simulation C to final year of field data C - LIVE ONLY
+final_SL_L_C_u <- as.data.table(subset(SL_L_C_u, timestep == 27))
+
+final_SL_field_L_C <- subset(SL_field_L_C, timestep == 27)
+
+final_SL_L_C_u <- merge(final_SL_L_C_u, final_SL_field_L_C, by = c("unit", "treatment", "timestep"))
+names(final_SL_L_C_u)[names(final_SL_L_C_u) == "C_unit.x"] <- "C_unit"
+names(final_SL_L_C_u)[names(final_SL_L_C_u) == "C_unit.y"] <- "field_C"
+
+SL_rss <- with(final_SL_L_C_u, sum((C_unit - field_C)^2))
+SL_rmse <- with(final_SL_L_C_u, sqrt(mean((C_unit - field_C)^2)))
+
+
+
+### Linear and mixed effects models ###
+
+# Data manipulation
+SL_L_C_u_mod <- subset(SL_L_C_u, timestep == 0 | timestep ==  2 | timestep == 5 | timestep == 17 | timestep == 27)
+
+SL_L_C_u_mod <- merge(SL_L_C_u_mod, SL_field_L_C, by = c("unit", "treatment", "timestep")) # okay that this data frame has 85 observations instead of 93 - the missing observations are because units 16-19 were not measured in years 2 and 5 
+
+names(SL_L_C_u_mod)[names(SL_L_C_u_mod) == "C_unit.x"] <- "sortie"
+names(SL_L_C_u_mod)[names(SL_L_C_u_mod) == "C_unit.y"] <- "field"
+
+SL_L_C_u_mod2 <- melt(SL_L_C_u_mod2, id.vars = c("unit", "treatment", "timestep"), measure.vars = c("sortie", "field")) # Should be 170 observations
+names(SL_L_C_u_mod2)[names(SL_L_C_u_mod2) == "variable"] <- "DataSource"
+names(SL_L_C_u_mod2)[names(SL_L_C_u_mod2) == "value"] <- "C_unit"
+
+SL_L_C_u_mod2 <- SL_L_C_u_mod2 %>%
+  mutate(unit = as.character(unit))
+
+# Basic linear model
+SL_lm <- lm(C_unit ~ DataSource, SL_L_C_u_mod2) # does not force the intercept through zero, tells us the difference between the two means
+summary(SL_lm)
+
+# Mixed effects models
+SL_lmer <- lmer(C_unit ~ DataSource * treatment + (1|unit/timestep), SL_L_C_u_mod2)
+summary(SL_lmer)
+
+
+
+# Plot all timesteps at once
+png("./Figures/SL_alltime_L_C.png", width=700, height=500, units="px", pointsize=23, antialias="default")
+
+ggplot(SL_L_C_u_mod, aes(x = field, y = sortie, shape = treatment, color = treatment)) +
+  theme_bw() + 
+  theme(panel.border = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black"), 
+        axis.text = element_text(size = 15), 
+        axis.title = element_text(size = 18), 
+        legend.title = element_text(size = 18), 
+        legend.text = element_text(size = 17)) +
+  geom_point(aes(colour = factor(treatment), shape = factor(treatment)), size = 2) +
+  geom_abline() +
+  scale_x_continuous(breaks = seq(0, 120, by = 10), limits = c(0, 120)) +
+  scale_y_continuous(breaks = seq(0, 120, by = 10), limits = c(0, 120)) +
+  labs(x = "Observed Carbon (Mg/ha)", y = "Predicted Carbon (Mg/ha)", col = "Treatment", shape = "Treatment") +
+  scale_shape_manual(values = c(16, 15, 17),
+                     breaks = c("ctrl", "med", "low"), 
+                     labels = c("Control", "Medium retention", "Low retention")) +
+  scale_colour_manual(values = c("#F8766D", "#619CFF", "#00BA38"), 
+                      breaks = c("ctrl", "med", "low"), 
+                      labels = c("Control", "Medium retention", "Low retention"))
+
+dev.off()
+
+
+
+# Plot carbon over time by treatment
+SL_field_L_C_T <- summarySE(SL_field_L_C,
+                      measurevar="C_unit",
+                      groupvars=c("treatment", "timestep"))
+
+SL_field_L_C_T$N <- NULL
+
+SL_L_C_u_T <- summarySE(SL_L_C_u,
+                      measurevar="C_unit",
+                      groupvars=c("treatment", "timestep"))
+
+SL_L_C_u_T$N <- NULL
+
+png("./Figures/SL_L_C_T.png", width=1600, height=800, units="px",
+    pointsize=23, antialias="default")
+
+ggplot(NULL, aes(x = timestep,  y = C_unit, fill = treatment, group = treatment)) + 
+  geom_line(data = SL_L_C_u_T, aes(col = treatment), size = 1.2) + 
+  theme(axis.line = element_line(colour = "black"), 
+        panel.background = element_blank(), 
+        legend.position = "top", 
+        legend.text = element_text(size = 25),
+        text = element_text(size = 28),
+        axis.text = element_text(size = 23),
+        axis.text.x = element_text(vjust = -1),
+        axis.text.y = element_text(hjust = 0.5),
+        axis.ticks.length = unit(7, "pt"),
+        axis.title.x = element_text(margin = margin(t = 14,  r = 0, b = 1, l = 0), face = "bold"),
+        axis.title.y = element_text(face = "bold")) +
+  scale_x_continuous(breaks = seq(0, 28, by = 2), expand = expansion(mult = c(0, 0.05))) +
+  scale_y_continuous(breaks = seq(0, 120, by = 20), expand = c(0,0), limits = c(0,120)) +
+  scale_colour_manual(values = c("#F8766D", "#619CFF", "#00BA38"), 
+                      breaks = c("ctrl", "med", "low"), 
+                      labels = c("Control", "Medium retention", "Low retention")) +
+  scale_fill_manual(values = c("#F8766D", "#619CFF", "#00BA38"), 
+                      breaks = c("ctrl", "med", "low"), 
+                      labels = c("Control", "Medium retention", "Low retention")) +
+  coord_cartesian(ylim = c(0, 120)) +
+  labs(x = "Years post treatment", y = "Carbon (Mg/ha)", col = "Treatment", fill = "Treatment", shape = "Treatment") +
+  geom_ribbon(data = SL_L_C_u_T, aes(ymin = C_unit - ci, ymax = C_unit + ci),  alpha=0.1, linetype="dashed",  color="grey") +
+  geom_point(data = SL_field_L_C_T, aes(shape = treatment), size = 5 , position = position_dodge(width = 0.5)) +
+  scale_shape_manual(values = c(24, 23, 21),
+                     breaks = c("ctrl", "med", "low"), 
+                     labels = c("Control", "Medium retention", "Low retention")) +
+  geom_errorbar(data = SL_field_L_C_T, aes(ymin = C_unit - ci, ymax = C_unit + ci), position = position_dodge(width = 1)) 
+  
+dev.off()
+
 
 
 
@@ -233,10 +354,10 @@ SL_L_C_Sx <- SL_L_C_Sx %>%
   mutate(C_unit = sum(C_tree, na.rm = TRUE))
 
 # Select desired columns
-SL_L_C_Sx <- SL_L_C_Sx %>%
+SL_L_C_Sx_u <- SL_L_C_Sx %>%
   dplyr::select(unit, timestep, C_unit, treatment)
 
-SL_L_C_Sx <- as.data.table(unique(SL_L_C_Sx))
+SL_L_C_Sx_u <- as.data.table(unique(SL_L_C_Sx_u))
 
 
 
@@ -251,10 +372,10 @@ SL_L_C_Bl <- SL_L_C_Bl %>%
   mutate(C_unit = sum(C_tree, na.rm = TRUE))
 
 # Select desired columns
-SL_L_C_Bl <- SL_L_C_Bl %>%
+SL_L_C_Bl_u <- SL_L_C_Bl %>%
   dplyr::select(unit, timestep, C_unit, treatment)
 
-SL_L_C_Bl <- as.data.table(unique(SL_L_C_Bl))
+SL_L_C_Bl_u <- as.data.table(unique(SL_L_C_Bl_u))
 
 
 
