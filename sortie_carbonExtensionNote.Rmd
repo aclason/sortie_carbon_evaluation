@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 
 ls <- c("tidyverse", "data.table") # Data Management and Manipulation (removed plyr - might need to add back)
 ls <- append(ls, c("rsortie")) # sortie
-ls <- append(ls, c("lme4", "lmerTest", Rmisc)) # analysis
+ls <- append(ls, c("lme4", "lmerTest", "Rmisc")) # analysis
 ls <- append(ls, c("ggplot2")) # model interpretation/visualization
 
 # Install if needed -- then load. 
@@ -106,7 +106,6 @@ SL_L_C_u <- as.data.table(unique(SL_L_C_u))
 
 # DEAD
 SL_D_C <- read.csv("./Inputs/Data/SummitLake_C_0506_D.csv")
-# This data frame will be used below to calculate carbon per species
 
 SL_D_C_u <- SL_D_C %>%
   dplyr::select(unit, timestep, C_unit, treatment)
@@ -147,7 +146,7 @@ DC_L_C_p <- DC_L_C %>% # p = plot (this data frame is summarized to the plot lev
 
 DC_L_C_p <- unique(DC_L_C_p)
 
-DC_L_C_p <- DC_L_C_p %>% # u = unit
+DC_L_C_p <- DC_L_C_p %>% 
   dplyr::group_by(timestep, Unit) %>% 
   dplyr::mutate(C_unit = sum(C_plot, na.rm = TRUE)/count)
 
@@ -159,15 +158,14 @@ DC_L_C_u <- as.data.table(unique(DC_L_C_u))
 
 
 # DEAD
-DC_D_C <- read.csv("./Inputs/Data/DateCreek_C_D.csv") # DC = Date Creek, L = living, C = carbon
-# This data frame will be used below to calculate carbon per species
+DC_D_C <- read.csv("./Inputs/Data/DateCreek_C_D.csv")
 
 DC_D_C_p <- DC_D_C %>% # p = plot (this data frame is summarized to the plot level)
   dplyr::select(timestep, Unit, PlotNumber, C_plot, Treatment) 
 
 DC_D_C_p <- unique(DC_D_C_p)
 
-DC_D_C_p <- DC_D_C_p %>% # u = unit
+DC_D_C_p <- DC_D_C_p %>% 
   dplyr::group_by(timestep, Unit) %>% 
   dplyr::mutate(C_unit = sum(C_plot, na.rm = TRUE)/count)
 
@@ -212,7 +210,7 @@ SL_L_C_u_mod <- merge(SL_L_C_u_mod, SL_field_L_C, by = c("unit", "treatment", "t
 names(SL_L_C_u_mod)[names(SL_L_C_u_mod) == "C_unit.x"] <- "sortie"
 names(SL_L_C_u_mod)[names(SL_L_C_u_mod) == "C_unit.y"] <- "field"
 
-SL_L_C_u_mod2 <- melt(SL_L_C_u_mod2, id.vars = c("unit", "treatment", "timestep"), measure.vars = c("sortie", "field")) # Should be 170 observations
+SL_L_C_u_mod2 <- melt(SL_L_C_u_mod, id.vars = c("unit", "treatment", "timestep"), measure.vars = c("sortie", "field")) # Should be 170 observations
 names(SL_L_C_u_mod2)[names(SL_L_C_u_mod2) == "variable"] <- "DataSource"
 names(SL_L_C_u_mod2)[names(SL_L_C_u_mod2) == "value"] <- "C_unit"
 
@@ -220,12 +218,12 @@ SL_L_C_u_mod2 <- SL_L_C_u_mod2 %>%
   mutate(unit = as.character(unit))
 
 # Basic linear model
-SL_lm <- lm(C_unit ~ DataSource, SL_L_C_u_mod2) # does not force the intercept through zero, tells us the difference between the two means
-summary(SL_lm)
+SL_L_C_lm <- lm(C_unit ~ DataSource, SL_L_C_u_mod2) # does not force the intercept through zero, tells us the difference between the two means
+summary(SL_L_C_lm)
 
 # Mixed effects models
-SL_lmer <- lmer(C_unit ~ DataSource * treatment + (1|unit/timestep), SL_L_C_u_mod2)
-summary(SL_lmer)
+SL_L_C_lmer <- lmer(C_unit ~ DataSource * treatment + (1|unit/timestep), SL_L_C_u_mod2)
+summary(SL_L_C_lmer)
 
 
 
@@ -325,6 +323,144 @@ dev.off()
 ### Summit Lake ###
 ###################
 
+# Merge data frame with labels, so all timesteps have a C_unit (to include zeros)
+
+labels.treatment <- unique(subset(SL_D_C_u, select = c("unit", "treatment")))
+
+labels.time <- data.frame(unit = c(rep(3, 28), rep(4, 28), rep(5, 28), rep(6, 28), rep(7, 28), rep(8, 28), rep(9, 28), rep(10, 28), rep(11, 28), rep(12, 28), rep(13, 28), rep(14, 28), rep(15, 28), rep(16, 28), rep(17, 28), rep(18, 28), rep(19, 28), rep(20, 28), rep(24, 28)), timestep = rep(seq(0, 27, by = 1), times = 19))
+
+labels <- merge(labels.treatment, labels.time, by = "unit")
+
+SL_D_C_u <- merge(SL_D_C_u, labels, by = c("unit", "timestep"), all.y = TRUE)
+
+SL_D_C_u$treatment.x <- NULL
+
+names(SL_D_C_u)[names(SL_D_C_u) == "treatment.y"] <- "treatment"
+
+SL_D_C_u <- SL_D_C_u %>%
+    dplyr::mutate(C_unit = replace(C_unit, is.na(C_unit), 0))
+
+
+
+### RSS and RMSE ###
+
+# Compare final year of simulation C to final year of field data C - DEAD ONLY
+final_SL_D_C_u <- as.data.table(subset(SL_D_C_u, timestep == 27))
+
+final_SL_field_D_C <- subset(SL_field_D_C, timestep == 27)
+
+final_SL_D_C_u <- merge(final_SL_D_C_u, final_SL_field_D_C, by = c("unit", "treatment", "timestep"))
+names(final_SL_D_C_u)[names(final_SL_D_C_u) == "C_unit.x"] <- "C_unit"
+names(final_SL_D_C_u)[names(final_SL_D_C_u) == "C_unit.y"] <- "field_C"
+
+SL_rss <- with(final_SL_D_C_u, sum((C_unit - field_C)^2))
+SL_rmse <- with(final_SL_D_C_u, sqrt(mean((C_unit - field_C)^2)))
+
+
+
+### Linear and mixed effects models ###
+
+# Data manipulation
+SL_D_C_u_mod <- subset(SL_D_C_u, timestep == 0 | timestep ==  2 | timestep == 5 | timestep == 17 | timestep == 27)
+
+SL_D_C_u_mod <- merge(SL_D_C_u_mod, SL_field_D_C, by = c("unit", "treatment", "timestep")) # okay that this data frame has 85 observations instead of 93 - the missing observations are because units 16-19 were not measured in years 2 and 5 
+names(SL_D_C_u_mod)[names(SL_D_C_u_mod) == "C_unit.x"] <- "sortie"
+names(SL_D_C_u_mod)[names(SL_D_C_u_mod) == "C_unit.y"] <- "field"
+
+SL_D_C_u_mod2 <- melt(SL_D_C_u_mod, id.vars = c("unit", "treatment", "timestep"), measure.vars = c("sortie", "field")) # Should be 170 observations
+names(SL_D_C_u_mod2)[names(SL_D_C_u_mod2) == "variable"] <- "DataSource"
+names(SL_D_C_u_mod2)[names(SL_D_C_u_mod2) == "value"] <- "C_unit"
+
+SL_D_C_u_mod2 <- SL_D_C_u_mod2 %>%
+  mutate(unit = as.character(unit))
+
+# Basic linear model
+SL_D_C_lm <- lm(C_unit ~ DataSource, SL_D_C_u_mod2) # does not force the intercept through zero, tells us the difference between the two means
+summary(SL_D_C_lm)
+
+# Mixed effects models
+SL_D_C_lmer <- lmer(C_unit ~ DataSource * treatment + (1|unit/timestep), SL_D_C_u_mod2)
+summary(SL_D_C_lmer)
+
+
+
+# Plot all timesteps at once
+png("./Figures/SL_alltime_D_C.png", width=700, height=500, units="px", pointsize=23, antialias="default")
+
+ggplot(SL_D_C_u_mod, aes(x = field, y = sortie, shape = treatment, color = treatment)) +
+  theme_bw() + 
+  theme(panel.border = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black"), 
+        axis.text = element_text(size = 15), 
+        axis.title = element_text(size = 18), 
+        legend.title = element_text(size = 18), 
+        legend.text = element_text(size = 17)) +
+  geom_point(aes(colour = factor(treatment), shape = factor(treatment)), size = 2) +
+  geom_abline() +
+  scale_x_continuous(breaks = seq(0, 35, by = 5), limits = c(0, 35)) +
+  scale_y_continuous(breaks = seq(0, 35, by = 5), limits = c(0, 35)) +
+  labs(x = "Observed Carbon (Mg/ha)", y = "Predicted Carbon (Mg/ha)", col = "Treatment", shape = "Treatment") +
+  scale_shape_manual(values = c(16, 15, 17),
+                     breaks = c("ctrl", "med", "low"), 
+                     labels = c("Control", "Medium retention", "Low retention")) +
+  scale_colour_manual(values = c("#F8766D", "#619CFF", "#00BA38"), 
+                      breaks = c("ctrl", "med", "low"), 
+                      labels = c("Control", "Medium retention", "Low retention"))
+
+dev.off()
+
+
+
+# Plot carbon over time by treatment
+SL_field_D_C_T <- summarySE(SL_field_D_C,
+                      measurevar="C_unit",
+                      groupvars=c("treatment", "timestep"))
+
+SL_field_D_C_T$N <- NULL
+
+SL_D_C_u_T <- summarySE(SL_D_C_u,
+                      measurevar="C_unit",
+                      groupvars=c("treatment", "timestep"))
+
+SL_D_C_u_T$N <- NULL
+
+png("./Figures/SL_D_C_T.png", width=1600, height=800, units="px",
+    pointsize=23, antialias="default")
+
+ggplot(NULL, aes(x = timestep,  y = C_unit, fill = treatment, group = treatment)) + 
+  geom_line(data = SL_D_C_u_T, aes(col = treatment), size = 1.2) + 
+  theme(axis.line = element_line(colour = "black"), 
+        panel.background = element_blank(), 
+        legend.position = "top", 
+        legend.text = element_text(size = 25),
+        text = element_text(size = 28),
+        axis.text = element_text(size = 23),
+        axis.text.x = element_text(vjust = -1),
+        axis.text.y = element_text(hjust = 0.5),
+        axis.ticks.length = unit(7, "pt"),
+        axis.title.x = element_text(margin = margin(t = 14,  r = 0, b = 1, l = 0), face = "bold"),
+        axis.title.y = element_text(face = "bold")) +
+  scale_x_continuous(breaks = seq(0, 28, by = 2), expand = expansion(mult = c(0, 0.05))) +
+  scale_y_continuous(breaks = seq(-10, 25, by = 5), expand = c(0,0), limits = c(-10, 25)) +
+  scale_colour_manual(values = c("#F8766D", "#619CFF", "#00BA38"), 
+                      breaks = c("ctrl", "med", "low"), 
+                      labels = c("Control", "Medium retention", "Low retention")) +
+  scale_fill_manual(values = c("#F8766D", "#619CFF", "#00BA38"), 
+                      breaks = c("ctrl", "med", "low"), 
+                      labels = c("Control", "Medium retention", "Low retention")) +
+  coord_cartesian(ylim = c(0, 25)) +
+  labs(x = "Years post treatment", y = "Carbon (Mg/ha)", col = "Treatment", fill = "Treatment", shape = "Treatment") +
+  geom_ribbon(data = SL_D_C_u_T, aes(ymin = C_unit - ci, ymax = C_unit + ci),  alpha=0.1, linetype="dashed",  color="grey") +
+  geom_point(data = SL_field_D_C_T, aes(shape = treatment), size = 5 , position = position_dodge(width = 0.5)) +
+  scale_shape_manual(values = c(24, 23, 21),
+                     breaks = c("ctrl", "med", "low"), 
+                     labels = c("Control", "Medium retention", "Low retention")) +
+  geom_errorbar(data = SL_field_D_C_T, aes(ymin = C_unit - ci, ymax = C_unit + ci), position = position_dodge(width = 1)) 
+  
+dev.off()
+
 
 
 ##################
@@ -337,7 +473,7 @@ dev.off()
 
 
 
-5. Carbon by species
+5. Carbon by species (LIVE ONLY)
 ```{r}
 ###################
 ### Summit Lake ###
