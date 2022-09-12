@@ -197,8 +197,8 @@ final_SL_L_C_u <- merge(final_SL_L_C_u, final_SL_field_L_C, by = c("unit", "trea
 names(final_SL_L_C_u)[names(final_SL_L_C_u) == "C_unit.x"] <- "C_unit"
 names(final_SL_L_C_u)[names(final_SL_L_C_u) == "C_unit.y"] <- "field_C"
 
-SL_rss <- with(final_SL_L_C_u, sum((C_unit - field_C)^2))
-SL_rmse <- with(final_SL_L_C_u, sqrt(mean((C_unit - field_C)^2)))
+SL_L_rss <- with(final_SL_L_C_u, sum((C_unit - field_C)^2))
+SL_L_rmse <- with(final_SL_L_C_u, sqrt(mean((C_unit - field_C)^2)))
 
 
 
@@ -343,8 +343,8 @@ final_DC_L_C_u <- merge(final_DC_L_C_u, final_DC_field_L_C, by = c("Unit", "Trea
 names(final_DC_L_C_u)[names(final_DC_L_C_u) == "C_unit.x"] <- "C_unit"
 names(final_DC_L_C_u)[names(final_DC_L_C_u) == "C_unit.y"] <- "field_C"
 
-DC_rss <- with(final_DC_L_C_u, sum((C_unit - field_C)^2))
-DC_rmse <- with(final_DC_L_C_u, sqrt(mean((C_unit - field_C)^2)))
+DC_L_rss <- with(final_DC_L_C_u, sum((C_unit - field_C)^2))
+DC_L_rmse <- with(final_DC_L_C_u, sqrt(mean((C_unit - field_C)^2)))
 
 
 
@@ -488,8 +488,8 @@ final_SL_D_C_u <- merge(final_SL_D_C_u, final_SL_field_D_C, by = c("unit", "trea
 names(final_SL_D_C_u)[names(final_SL_D_C_u) == "C_unit.x"] <- "C_unit"
 names(final_SL_D_C_u)[names(final_SL_D_C_u) == "C_unit.y"] <- "field_C"
 
-SL_rss <- with(final_SL_D_C_u, sum((C_unit - field_C)^2))
-SL_rmse <- with(final_SL_D_C_u, sqrt(mean((C_unit - field_C)^2)))
+SL_D_rss <- with(final_SL_D_C_u, sum((C_unit - field_C)^2))
+SL_D_rmse <- with(final_SL_D_C_u, sqrt(mean((C_unit - field_C)^2)))
 
 
 
@@ -602,7 +602,141 @@ dev.off()
 ### Date Creek ###
 ##################
 
+# Merge data frame with labels, so all timesteps have a C_unit (to include zeros) - e.g., the clear cut units
 
+DC.labels.treatment <- unique(subset(DC_L_C_u, select = c("Unit", "Treatment")))
+
+DC.labels.time <- data.frame(Unit = c(rep("A1", 27), rep("A2", 27), rep("A3", 27), rep("A4", 27), rep("B1", 27), rep("B2", 27), rep("B3", 27), rep("B4", 27), rep("B5", 27), rep("C1", 27), rep("C2", 27), rep("C3", 27), rep("D2", 27), rep("D3", 27), rep("D4", 27), rep("D5", 27)), timestep = rep(seq(0, 26, by = 1), times = 16))
+
+DC.labels <- merge(DC.labels.treatment, DC.labels.time, by = "Unit")
+
+DC_D_C_u <- merge(DC_D_C_u, DC.labels, by = c("Unit", "timestep"), all.y = TRUE)
+
+DC_D_C_u$Treatment.x <- NULL
+
+names(DC_D_C_u)[names(DC_D_C_u) == "Treatment.y"] <- "Treatment"
+
+DC_D_C_u <- DC_D_C_u %>%
+    dplyr::mutate(C_unit = replace(C_unit, is.na(C_unit), 0))
+
+
+
+### RSS and RMSE ###
+
+# Compare final year of simulation C to final year of field data C - LIVE ONLY
+final_DC_D_C_u <- as.data.table(subset(DC_D_C_u, timestep == 26))
+
+final_DC_field_D_C <- subset(DC_field_D_C, timestep == 26)
+
+final_DC_D_C_u <- merge(final_DC_D_C_u, final_DC_field_D_C, by = c("Unit", "Treatment", "timestep"))
+names(final_DC_D_C_u)[names(final_DC_D_C_u) == "C_unit.x"] <- "C_unit"
+names(final_DC_D_C_u)[names(final_DC_D_C_u) == "C_unit.y"] <- "field_C"
+
+DC_D_rss <- with(final_DC_D_C_u, sum((C_unit - field_C)^2))
+DC_D_rmse <- with(final_DC_D_C_u, sqrt(mean((C_unit - field_C)^2)))
+
+
+
+### Linear and mixed effects models ###
+
+# Data manipulation
+DC_D_C_u_mod <- subset(DC_D_C_u, timestep == 0 | timestep ==  1 | timestep == 18 | timestep == 26) # mod = model
+
+DC_D_C_u_mod <- merge(DC_D_C_u_mod, DC_field_D_C, by = c("Unit", "Treatment", "timestep")) # okay that this data frame has 85 observations instead of 93 - the missing observations are because units 16-19 were not measured in years 2 and 5 - we don't want them to be zeros, they just weren't measured
+
+names(DC_D_C_u_mod)[names(DC_D_C_u_mod) == "C_unit.x"] <- "sortie"
+names(DC_D_C_u_mod)[names(DC_D_C_u_mod) == "C_unit.y"] <- "field"
+
+DC_D_C_u_mod2 <- melt(DC_D_C_u_mod, id.vars = c("Unit", "Treatment", "timestep"), measure.vars = c("sortie", "field")) # Should be 170 observations
+names(DC_D_C_u_mod2)[names(DC_D_C_u_mod2) == "variable"] <- "DataSource"
+names(DC_D_C_u_mod2)[names(DC_D_C_u_mod2) == "value"] <- "C_unit"
+
+DC_D_C_u_mod2 <- DC_D_C_u_mod2 %>%
+  mutate(unit = as.character(Unit))
+
+# Basic linear model
+DC_D_C_Dm <- lm(C_unit ~ DataSource, DC_D_C_u_mod2) # does not force the intercept through zero, tells us the difference between the two means
+summary(DC_D_C_Dm)
+
+# Mixed effects models
+DC_D_C_Dmer <- lmer(C_unit ~ DataSource * Treatment + (1|Unit/timestep), DC_D_C_u_mod2) # Gets singular warning!!! Needs adjusting - LW (sept12 22)
+summary(DC_D_C_Dmer)
+
+
+
+# Plot all timesteps at once - observed vs. predicted
+png("./Figures/DC_alltime_D_C.png", width=700, height=500, units="px", pointsize=23, antialias="default")
+
+ggplot(DC_D_C_u_mod, aes(x = field, y = sortie, shape = Treatment, color = Treatment)) +
+  theme_bw() + 
+  theme(panel.border = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black"), 
+        axis.text = element_text(size = 15), 
+        axis.title = element_text(size = 18), 
+        legend.title = element_text(size = 18), 
+        legend.text = element_text(size = 17)) +
+  geom_point(aes(colour = factor(Treatment), shape = factor(Treatment)), size = 2) +
+  geom_abline() +
+  scale_x_continuous(breaks = seq(0, 60, by = 10), limits = c(0, 60)) +
+  scale_y_continuous(breaks = seq(0, 60, by = 10), limits = c(0, 60)) +
+  labs(x = "Observed Carbon (Mg/ha)", y = "Predicted Carbon (Mg/ha)", col = "Treatment", shape = "Treatment") +
+  scale_shape_manual(values = c(17, 16, 18, 15),
+                     breaks = c("CC", "HR", "LR", "NH"), 
+                     labels = c("CC", "HR", "LR", "NH")) +
+  scale_colour_manual(values = c("#F8766D", "#00BFC4", "#7CAE00", "#C77CFF"), 
+                      breaks = c("CC", "HR", "LR", "NH"), 
+                      labels = c("CC", "HR", "LR", "NH"))
+
+dev.off()
+
+
+
+# Plot carbon over time by treatment
+DC_field_D_C_T <- summarySE(DC_field_D_C,
+                      measurevar="C_unit",
+                      groupvars=c("Treatment", "timestep")) # T = treatment (this new data frame is summarized to the treatment level)
+
+DC_field_D_C_T$N <- NULL
+
+DC_D_C_u_T <- summarySE(DC_D_C_u,
+                      measurevar="C_unit",
+                      groupvars=c("Treatment", "timestep"))
+
+DC_D_C_u_T$N <- NULL
+
+
+png("./Figures/DC_D_C_T.png", width=1600, height=800, units="px",
+    pointsize=23, antialias="default")
+
+ggplot(NULL, aes(x = timestep,  y = C_unit, fill = Treatment, group = Treatment)) + 
+  geom_line(data = DC_D_C_u_T, aes(col = Treatment), size = 1.2) + 
+  theme(axis.line = element_line(colour = "black"), 
+        panel.background = element_blank(), 
+        legend.position = "top", 
+        legend.text = element_text(size = 25),
+        text = element_text(size = 28),
+        axis.text = element_text(size = 23),
+        axis.text.x = element_text(vjust = -1),
+        axis.text.y = element_text(hjust = 0.5),
+        axis.ticks.length = unit(7, "pt"),
+        axis.title.x = element_text(margin = margin(t = 14,  r = 0, b = 1, l = 0), face = "bold"),
+        axis.title.y = element_text(face = "bold")) +
+  scale_x_continuous(breaks = seq(0, 26, by = 2), expand = expansion(mult = c(0, 0.05))) +
+  scale_y_continuous(breaks = seq(-15, 75, by = 15), expand = c(0,0), limits = c(-15, 75)) +
+  coord_cartesian(ylim = c(0, 75)) + # Remove this line if you want it to plot into the negative
+  ylab("Live carbon Mg/ha") + 
+  xlab('Years post-treatment') +
+  geom_ribbon(data = DC_D_C_u_T, aes(ymin = C_unit - ci, ymax = C_unit + ci),  
+              alpha=0.1, linetype="dashed",  color="grey") +
+  geom_point(data = DC_field_D_C_T, aes(shape = Treatment), size = 3 , 
+             position = position_dodge(width = 0.5)) +
+  scale_shape_manual(values = c(24, 21, 23, 22)) +
+  geom_errorbar(data = DC_field_D_C_T, aes(ymin = C_unit - ci, ymax = C_unit + ci), 
+                position = position_dodge(width = 1)) 
+  
+dev.off()
 
 ```
 
