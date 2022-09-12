@@ -486,14 +486,85 @@ SL_L_C_Sx <- subset(SL_L_C, SL_L_C$Species == "Sx")
 
 # Recalculate C per unit for spruce only
 SL_L_C_Sx <- SL_L_C_Sx %>% 
-  group_by(timestep, unit) %>% 
-  mutate(C_unit = sum(C_tree, na.rm = TRUE))
+  dplyr::group_by(timestep, unit) %>% 
+  dplyr::mutate(C_unit = sum(C_tree, na.rm = TRUE))
 
 # Select desired columns
 SL_L_C_Sx_u <- SL_L_C_Sx %>%
   dplyr::select(unit, timestep, C_unit, treatment)
 
 SL_L_C_Sx_u <- as.data.table(unique(SL_L_C_Sx_u))
+
+
+
+### RSS and RMSE ###
+
+# Compare final year of simulation C to final year of field data C - LIVE ONLY
+final_SL_L_C_Sx_u <- as.data.table(subset(SL_L_C_Sx_u, timestep == 27))
+
+final_SL_field_L_C_Sx <- subset(SL_field_L_C_Sx, timestep == 27)
+
+final_SL_L_C_Sx_u <- merge(final_SL_L_C_Sx_u, final_SL_field_L_C_Sx, by = c("unit", "treatment", "timestep"))
+names(final_SL_L_C_Sx_u)[names(final_SL_L_C_Sx_u) == "C_unit.x"] <- "C_unit"
+names(final_SL_L_C_Sx_u)[names(final_SL_L_C_Sx_u) == "C_unit.y"] <- "field_C"
+
+SL_Sx_rss <- with(final_SL_L_C_Sx_u, sum((C_unit - field_C)^2))
+SL_Sx_rmse <- with(final_SL_L_C_Sx_u, sqrt(mean((C_unit - field_C)^2)))
+
+
+
+### Linear and mixed effects models ###
+
+# Data manipulation
+SL_L_C_Sx_u_mod <- subset(SL_L_C_Sx_u, timestep == 0 | timestep ==  2 | timestep == 5 | timestep == 17 | timestep == 27)
+
+SL_L_C_Sx_u_mod <- merge(SL_L_C_Sx_u_mod, SL_field_L_C_Sx, by = c("unit", "treatment", "timestep")) # okay that this data frame has 85 observations instead of 93 - the missing observations are because units 16-19 were not measured in years 2 and 5 
+
+names(SL_L_C_Sx_u_mod)[names(SL_L_C_Sx_u_mod) == "C_unit.x"] <- "sortie"
+names(SL_L_C_Sx_u_mod)[names(SL_L_C_Sx_u_mod) == "C_unit.y"] <- "field"
+
+SL_L_C_Sx_u_mod2 <- melt(SL_L_C_Sx_u_mod, id.vars = c("unit", "treatment", "timestep"), measure.vars = c("sortie", "field")) # Should be 170 observations
+names(SL_L_C_Sx_u_mod2)[names(SL_L_C_Sx_u_mod2) == "variable"] <- "DataSource"
+names(SL_L_C_Sx_u_mod2)[names(SL_L_C_Sx_u_mod2) == "value"] <- "C_unit"
+
+SL_L_C_Sx_u_mod2 <- SL_L_C_Sx_u_mod2 %>%
+  mutate(unit = as.character(unit))
+
+# Basic linear model
+SL_L_C_Sx_lm <- lm(C_unit ~ DataSource, SL_L_C_Sx_u_mod2) # does not force the intercept through zero, tells us the difference between the two means
+summary(SL_L_C_Sx_lm)
+
+# Mixed effects models
+SL_L_C_Sx_lmer <- lmer(C_unit ~ DataSource * treatment + (1|unit/timestep), SL_L_C_Sx_u_mod2)
+summary(SL_L_C_Sx_lmer)
+
+# Plot all timesteps at once
+
+png("./Figures/SL_alltime_L_C_Sx.png", width=700, height=500, units="px", pointsize=23, antialias="default")
+
+ggplot(SL_L_C_Sx_u_mod, aes(x = field, y = sortie, shape = treatment, color = treatment)) +
+  theme_bw() + 
+  theme(panel.border = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black"), 
+        axis.text = element_text(size = 15), 
+        axis.title = element_text(size = 18), 
+        legend.title = element_text(size = 18), 
+        legend.text = element_text(size = 17)) +
+  geom_point(aes(colour = factor(treatment), shape = factor(treatment)), size = 2) +
+  geom_abline() +
+  scale_x_continuous(breaks = seq(0, 60, by = 10), limits = c(0, 60)) +
+  scale_y_continuous(breaks = seq(0, 60, by = 10), limits = c(0, 60)) +
+  labs(x = "Observed Carbon (Mg/ha)", y = "Predicted Carbon (Mg/ha)", col = "Treatment", shape = "Treatment") +
+  scale_shape_manual(values = c(16, 15, 17),
+                     breaks = c("ctrl", "med", "low"), 
+                     labels = c("Control", "Medium retention", "Low retention")) +
+  scale_colour_manual(values = c("#F8766D", "#619CFF", "#00BA38"), 
+                      breaks = c("ctrl", "med", "low"), 
+                      labels = c("Control", "Medium retention", "Low retention"))
+
+dev.off()
 
 
 
@@ -504,14 +575,85 @@ SL_L_C_Bl <- subset(SL_L_C, SL_L_C$Species == "Bl")
 
 # Recalculate C per unit for spruce only
 SL_L_C_Bl <- SL_L_C_Bl %>% 
-  group_by(timestep, unit) %>% 
-  mutate(C_unit = sum(C_tree, na.rm = TRUE))
+  dplyr::group_by(timestep, unit) %>% 
+  dplyr::mutate(C_unit = sum(C_tree, na.rm = TRUE))
 
 # Select desired columns
 SL_L_C_Bl_u <- SL_L_C_Bl %>%
   dplyr::select(unit, timestep, C_unit, treatment)
 
 SL_L_C_Bl_u <- as.data.table(unique(SL_L_C_Bl_u))
+
+
+
+### RSS and RMSE ###
+
+# Compare final year of simulation C to final year of field data C - LIVE ONLY
+final_SL_L_C_Bl_u <- as.data.table(subset(SL_L_C_Bl_u, timestep == 27))
+
+final_SL_field_L_C_Bl <- subset(SL_field_L_C_Bl, timestep == 27)
+
+final_SL_L_C_Bl_u <- merge(final_SL_L_C_Bl_u, final_SL_field_L_C_Bl, by = c("unit", "treatment", "timestep"))
+names(final_SL_L_C_Bl_u)[names(final_SL_L_C_Bl_u) == "C_unit.x"] <- "C_unit"
+names(final_SL_L_C_Bl_u)[names(final_SL_L_C_Bl_u) == "C_unit.y"] <- "field_C"
+
+SL_Bl_rss <- with(final_SL_L_C_Bl_u, sum((C_unit - field_C)^2))
+SL_Bl_rmse <- with(final_SL_L_C_Bl_u, sqrt(mean((C_unit - field_C)^2)))
+
+
+
+### Linear and mixed effects models ###
+
+# Data manipulation
+SL_L_C_Bl_u_mod <- subset(SL_L_C_Bl_u, timestep == 0 | timestep ==  2 | timestep == 5 | timestep == 17 | timestep == 27)
+
+SL_L_C_Bl_u_mod <- merge(SL_L_C_Bl_u_mod, SL_field_L_C_Bl, by = c("unit", "treatment", "timestep")) # okay that this data frame has 85 observations instead of 93 - the missing observations are because units 16-19 were not measured in years 2 and 5 
+
+names(SL_L_C_Bl_u_mod)[names(SL_L_C_Bl_u_mod) == "C_unit.x"] <- "sortie"
+names(SL_L_C_Bl_u_mod)[names(SL_L_C_Bl_u_mod) == "C_unit.y"] <- "field"
+
+SL_L_C_Bl_u_mod2 <- melt(SL_L_C_Bl_u_mod, id.vars = c("unit", "treatment", "timestep"), measure.vars = c("sortie", "field")) # Should be 170 observations
+names(SL_L_C_Bl_u_mod2)[names(SL_L_C_Bl_u_mod2) == "variable"] <- "DataSource"
+names(SL_L_C_Bl_u_mod2)[names(SL_L_C_Bl_u_mod2) == "value"] <- "C_unit"
+
+SL_L_C_Bl_u_mod2 <- SL_L_C_Bl_u_mod2 %>%
+  mutate(unit = as.character(unit))
+
+# Basic linear model
+SL_L_C_Bl_lm <- lm(C_unit ~ DataSource, SL_L_C_Bl_u_mod2) # does not force the intercept through zero, tells us the difference between the two means
+summary(SL_L_C_Bl_lm)
+
+# Mixed effects models
+SL_L_C_Bl_lmer <- lmer(C_unit ~ DataSource * treatment + (1|unit/timestep), SL_L_C_Bl_u_mod2)
+summary(SL_L_C_Bl_lmer)
+
+# Plot all timesteps at once
+
+png("./Figures/SL_alltime_L_C_Bl.png", width=700, height=500, units="px", pointsize=23, antialias="default")
+
+ggplot(SL_L_C_Bl_u_mod, aes(x = field, y = sortie, shape = treatment, color = treatment)) +
+  theme_bw() + 
+  theme(panel.border = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black"), 
+        axis.text = element_text(size = 15), 
+        axis.title = element_text(size = 18), 
+        legend.title = element_text(size = 18), 
+        legend.text = element_text(size = 17)) +
+  geom_point(aes(colour = factor(treatment), shape = factor(treatment)), size = 2) +
+  geom_abline() +
+  scale_x_continuous(breaks = seq(0, 85, by = 10), limits = c(0, 85)) +
+  scale_y_continuous(breaks = seq(0, 85, by = 10), limits = c(0, 85)) +
+  labs(x = "Observed Carbon (Mg/ha)", y = "Predicted Carbon (Mg/ha)", col = "Treatment", shape = "Treatment") +
+  scale_shape_manual(values = c(16, 15, 17),
+                     breaks = c("ctrl", "med", "low"), 
+                     labels = c("Control", "Medium retention", "Low retention")) +
+  scale_colour_manual(values = c("#F8766D", "#619CFF", "#00BA38"), 
+                      breaks = c("ctrl", "med", "low"), 
+                      labels = c("Control", "Medium retention", "Low retention"))
+
+dev.off()
 
 
 
