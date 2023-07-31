@@ -1,6 +1,6 @@
 ---
 title: "SORTIE Carbon Extension Note"
-author: "Leah Walker"
+author: "Alana Clason & Leah Walker"
 date: "2022-08-29"
 output: html_document
 editor_options: 
@@ -14,7 +14,10 @@ knitr::opts_chunk$set(echo = TRUE)
 ls <- c("tidyverse", "data.table") # Data Management and Manipulation (removed plyr - might need to add back)
 ls <- append(ls, c("rsortie")) # sortie
 ls <- append(ls, c("lme4", "lmerTest", "Rmisc")) # analysis
-ls <- append(ls, c("ggplot2")) # model interpretation/visualization
+ls <- append(ls, c("DateCreekData","sortieCarbon")) #data wrangling packages - add summit lake when created
+#ls <- append(ls, c("DateCreekData","SummitLake_Data")) #data wrangling packages - add summit lake when created
+ls <- append(ls, c("treeCalcs")) #package for allometry and carbon calculations
+ls <- append(ls, c("terra","sf")) #spatial data
 
 # Install if needed -- then load. 
 new.packages <- ls[!(ls %in% installed.packages()[,"Package"])]
@@ -25,47 +28,450 @@ rm(ls, new.packages)
 ```
 
 
-
-1. Set parameters
-- set pathways
+1. Calculate carbon from SORTIE
 ```{r}
-#Set pathways
-path_outputs <- "./Outputs/"
+#TO DO - ADD SEEDLINGS TO CARBON CALCS
+######### Date Creek -----------------------------------------------------------------------
+path_outputs <- "D:/Github/SORTIEparams/Outputs/ICH/Snags" #update this to the latest run path
+out_name <- "L-sn_br.csv" #update this to the latest run naming convention
+outputs <- list.files(path_outputs, pattern = out_name,full.names = TRUE)
+
+#create a single csv file for each plot from sortie outputs
+#for Date Creek the outputs are processed through the subplot function
+dc_sortie <- calcSortieC(outputs = outputs, dead = TRUE, BEC = "ICH")
+fwrite(dc_sortie, "./Inputs/Data/DC_sortieC.csv")  
+
+######## Summit Lake ------------------------------------------------------------------------
+path_outputs <- "D:/Sync/BVRC/FSD program/FCI/Partial cutting/Manuscript/Extension Note/SORTIE Carbon Extension Note/Files/Outputs/Extracted"
+run_name <- "-0506e"
+
+#create a single csv file for each plot from sortie outputs:
+rdSortieOutputs(out_path = path_outputs,run_name = run_name)
+
+outputs <- grep(".csv",
+                list.files(path_outputs, pattern = run_name, full.names = TRUE),
+                value = TRUE)
+
+sl_sortie <- calcSortieC(outputs = outputs, dead = TRUE, BEC = "SBS")
+
+treatsplit <- str_split(str_split(sl_sortie$Plot,"-", simplify=TRUE)[,3],
+                        "t",simplify=TRUE)[,2]
+sl_sortie[,Unit := as.numeric(treatsplit)]
+
+#merge with treatment data from SummitLakeData package:
+sl_sortie <- merge(sl_sortie, SummitLakeData::Treatments, by.x = "Unit", by.y = "unit")
+
+fwrite(sl_sortie,"./Inputs/Data/SL_sortieC.csv")
 
 ```
 
-- run makeFiles
-- run rsortie
-- clean field data
-- calculate carbon
-- calculate field carbon
-- calculate field carbon by species
 
+2. Estimate carbon from SORTIE by tree type (alive,snag), plot, timestep 
 ```{r}
-#I'm assuming we only need these scripts if you want to run all the calculations? - AC
-# Yup that's correct! - LW
+sl_sortie <- fread("./Inputs/Data/SL_sortieC.csv")
+dc_sortie <- fread("./Inputs/Data/DC_sortieC.csv")
 
-BA.function <- function(DBH) {pi*(DBH/200)^2}
+#Take out seedlings
+sl_sortie <- sl_sortie[Type != "Seedling"]
+dc_sortie <- dc_sortie[Type != "Seedling"]
 
-source("./R/clean_summit_lake_data.R")
-source("./R/calc_field_BA.R")
-source("../Carbon/CarbonFunctions.R")
-source("../Carbon/AllometryFunctions.R")
-source("./R/calc_field_C.R")
+#### Summit Lake----------------------------------------------------------------------------- 
+sl_sortie[,TSH:=ifelse(Unit==4|Unit==15,timestep+3,
+                            timestep+1)]
 
-###################
-### Summit Lake ###
-###################
+sl_u <- sl_sortie[,.(C_Unit_Ha = sum(C_tree, na.rm=TRUE)/4), by=.(Unit,TSH,Type,Species)]
+# For Summit Lake - full model runs = 200 x200m = 4 ha, so just applied it directly
+
+#add treatment codes:
+sl_u <- merge(sl_u, SummitLakeData::Treatments, by.x ="Unit", by.y = "unit")
+sl_u[,LiveDead:=ifelse(Type=="Snag","Snag","Live")]
+setnames(sl_u,"treatment","Treatment")
+sl_u[,Study:="Summit Lake"]
 
 
+#### Date Creek -----------------------------------------------------------------------------
+dc_sortie[,TSH:=timestep-1]
+# Sum carbon by Unit, plot, timestep, type (live, snag) and species
+dc_p <- dc_sortie[, .(C_plot= sum(C_tree, na.rm=TRUE)), by=.(Unit,SubPlot,TSH,Type, Species)]
+# Count the number of plots per unit and add to data set - varies by unit
+Unit_plots <- dc_p[TSH == -1, .(NumPlots = length(unique(SubPlot))), by = Unit]
 
-##################
-### Date Creek ###
-##################
+#Sum by unit and type and species
+dc_u <- dc_p[, .(C_Unit = sum(C_plot, na.rm = TRUE)), by = .(Unit, TSH,Type,Species)]
+
+dc_u <- merge(dc_u, Unit_plots, by = "Unit")
+dc_u[, PlotArea := 0.02*NumPlots]
+
+# Tree carbon by unit, timestep and Carbon (Mg)/Ha:
+dc_u[, C_Unit_Ha := C_Unit/PlotArea, by =.(Unit, TSH,Type,Species)]
+
+#add treatment codes:
+dc_u <- merge(dc_u, DateCreekData::Treatments, by.x ="Unit", by.y = "Unit")
+dc_u[,LiveDead:=ifelse(Type=="Snag","Snag","Live")][,NumPlots:=NULL][,PlotArea:=NULL][,C_Unit:=NULL]
+dc_u[,Study:="Date Creek"]
+
+#### Combine -------------------------------------------------------------------------------
+#combine sortie runs together
+dc_sl <- rbind(dc_u,sl_u)
+
+#### Plot/summarize -------------------------------------------------------------------------------
+#by species and type
+ggplot(dc_u) +
+  geom_point(aes(x = TSH, y = C_Unit_Ha, colour = Treatment))+
+  facet_grid(c("Type","Species"))
+  
+#by unit and live/dead
+dc_u_sum <- dc_u[,.(C_Unit_Ha = sum(C_Unit_Ha)), by=.(Unit,TSH,LiveDead,Treatment)]
+sl_u_sum <- sl_u[,.(C_Unit_Ha = sum(C_Unit_Ha)), by=.(Unit,TSH,LiveDead,Treatment)]
+dc_sl_sum <- dc_sl[,.(C_Unit_Ha = sum(C_Unit_Ha)), by=.(Study,Unit,TSH,LiveDead,Treatment)]
+
+
+ggplot(dc_sl_sum[TSH>0]) +
+  #geom_point(aes(x = timestep, y = C_Unit_Ha, colour = Treatment))+
+  geom_line(aes(x = TSH, y = C_Unit_Ha, colour = Treatment, group=Unit))+
+  geom_line(aes(x = TSH, y = C_Unit_Ha, colour = Treatment, group=Unit))+
+  xlab("Time since harvest")+
+  facet_grid(c("Study","LiveDead"))
+
+
+ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/CarbonLiveSnags.jpg")
 
 
 
 ```
+
+Snags
+
+
+
+
+
+3. Snags recruitment, snag fall and snag longevity calculations
+```{r}
+NH_tr <- DT_LS[Treatment=="NH"]
+NH_tr[, UniqXY := paste0(X,"_",Y), by = seq_len(nrow(NH_tr))]
+setkey(NH_tr,UniqXY)
+
+#1. Label the row with whether it's a sapling, snag created, or snag fall
+ids <- unique(NH_tr$UniqXY)
+for(i in 1:length(ids)){
+  #looking for adults, and snags that will fall
+  NH_tr[UniqXY == ids[i], stType := ifelse(Type == "Adult","Adult",
+                                      ifelse(Type == "Snag" & Dead.Code =="Alive",
+                                             "Snag",
+                                        ifelse(Type=="Snag" & Dead.Code == "Natural",
+                                              "SnFallNext", "Sapling")))]
+  # identify if/when snag created
+  snagCh <- which(NH_tr[UniqXY == ids[i]]$Type != 
+              dplyr::lag(NH_tr[UniqXY == ids[i]]$Type))
+  if(length(snagCh) > 0){
+    NH_tr[UniqXY == ids[i]][snagCh]$stType <- "SnagCreate"  
+  }
+}
+
+#2. Calculate Snag creation and snag fall rate
+NH_ad <- NH_tr[stType=="Adult", .N, by=.(Treatment, Unit, timestep)]
+setnames(NH_ad, "N", "NumAdult")
+NH_sn <- NH_tr[stType=="SnagCreate", .N, by=.(Treatment, Unit, timestep)]
+setnames(NH_sn, "N", "NumSnags")
+NH_sf <- NH_tr[stType=="SnFallNext", .N, by=.(Treatment, Unit, timestep)]
+setnames(NH_sf, "N", "NumSnagFall")
+
+NH_ad_sn <- merge(NH_ad, NH_sn, by=c("Treatment","Unit","timestep"))
+NH_ad_sn <- merge(NH_ad_sn, NH_sf, by=c("Treatment","Unit","timestep"))
+NH_ad_sn <- NH_ad_sn[,.(NumAdult, NumSnags, NumSnagFall,
+                SnagRecrRate = (NumSnags/(NumAdult+NumSnags))*100, 
+                SnagFallRate = (NumSnagFall/(NumSnags+NumSnagFall))*100),
+             by=c("Treatment","Unit","timestep")]
+
+ggplot(NH_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Unit),size=4)+
+  geom_line(aes(x = timestep, y = SnagRecrRate, colour = Unit),size=1.5)+
+  theme_minimal()+
+  ylab("Snag Recruitment Rate (%)")
+#ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagRecruitRate.jpg")
+
+ggplot(NH_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = Unit),size=4)+
+  geom_line(aes(x = timestep, y = SnagFallRate, colour = Unit),size=1.5)+
+  theme_minimal()+
+  ylab("Snag Fall Rate (%)")
+#ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagFallRate.jpg")
+
+#3. how long are snags standing
+#of the snags that fall, how long were they standing? So first figure out which trees fall
+fallIDs <- unique(NH_tr[stType == "SnFallNext"]$UniqXY)
+
+#then count how many years they stood as snags
+for(i in 1:length(fallIDs)){
+  NH_tr[UniqXY == fallIDs[i] & Type == "Snag", TimeAsSnag := .N]
+}
+
+SnagTime <- NH_tr[UniqXY %in% fallIDs & stType == "SnFallNext", .(Treatment,Unit,Species,DBH,UniqXY,TimeAsSnag)]
+
+ggplot(SnagTime)+
+  geom_boxplot(aes(y = Unit, x = TimeAsSnag, fill = Unit))+
+  theme_minimal()+
+  ylab("Number of years standing as snag")+
+  facet_wrap("Species")
+ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagLongevity.jpg")
+
+#from SORTIE parameters: 
+# tree fall probability (never becomes a snag)
+
+
+#Check against the snag run:
+unique(NH_tr[Type=="Adult"]$Dead.Code) # no adults were assigned a dead code of natural (or harvest)
+
+```
+
+
+Downed wood:
+
+
+From SORTIE
+```{r}
+
+######### Date Creek -----------------------------------------------------------------------
+Outputs_path <-  "../SORTIEparams/Outputs/ICH/JuvGrowth/" #update this to the latest run path
+out_name <- "L-sn_br.csv" #update this to the latest run naming convention
+outputs <- list.files(path_outputs, pattern = out_name,full.names = TRUE)
+
+#create a single csv file for each plot from sortie outputs
+#for Date Creek the outputs are processed through the subplot function
+dc_sortie <- calcSortieC(outputs = outputs, dead = TRUE, BEC = "ICH")
+fwrite(dc_sortie, "./Inputs/Data/DC_sortieC.csv")  
+
+M_cwd_dc
+F_cwd_dc
+
+#make rasters only for the grids of interest
+grid_to_output <- "totallogvol"
+
+#need to put the coordinates in the crs of date creek
+for(i in 1:length(DateCreekData::Treatments$Unit)){
+  UnitBounds_l <- UnitBounds %>% filter(Unit== DateCreekData::Treatments$Unit[i])
+  bb <- st_bbox(UnitBounds_l)
+  g_dt[Unit==DateCreekData::Treatments$Unit[i],
+       ':='(x_utm = ifelse(colnames == "GLI", bb[1]+(x*2), bb[1]+(x*8)),
+            y_utm = ifelse(colnames == "GLI", bb[2]+(y*2), bb[2]+(y*8)))] 
+}
+g_dt[,':='(x = NULL, y = NULL)]
+setnames(g_dt, c("x_utm","y_utm"), c("x","y"))
+
+rast_i <- g_dt[colnames == grid_to_output] %>%
+      arrange(.$timestep) %>%
+      split(.$Unit) %>%
+      lapply(., function(x) {x <- x %>% dplyr::select(-c("Unit","point_id","Unit",
+                                                         "mapnm","colnames","V1","Treat"))}) %>%
+      lapply(., function(x) {x <- x %>% pivot_wider(names_from = timestep, 
+                                                    values_from = values)}) %>%
+      map(.,rast)#%>%
+
+#I give up using apply:
+for(i in 1:length(rast_i)){
+  Unit_i <- DateCreekData::Treatments$Unit[i]
+  crs(rast_i[[Unit_i]]) <- "EPSG:3005"
+  UnitBounds_l <- UnitBounds %>% filter(Unit== Unit_i)
+  rast_i[[Unit_i]] <- mask(rast_i[[Unit_i]], UnitBounds_l)
+}
+
+#light grids --------------------------------------------------------------------------------
+grid_to_output <- "QuadratGLI"
+
+rast_gli <- g_dt[mapnm == grid_to_output] %>%
+      arrange(.$timestep) %>%
+      split(.$Unit) %>%
+      lapply(., function(x) {x <- x %>% dplyr::select(-c("Unit","point_id","Unit",
+                                                         "mapnm","colnames","V1","Treat"))}) %>%
+      lapply(., function(x) {x <- x %>% pivot_wider(names_from = timestep, 
+                                                    values_from = values)}) 
+rast_gli
+  pmap(rast_gli, rast)
+  map(rast_gli, rast(x,crs, res)(., crs="EPSG:3153", res = 8))
+  
+  rast(rast_gli$A1, crs = "EPSG:3153")
+
+#mask by the unit boundary
+Units_path <- "../DateCreekData/data-raw/Harvests_Plants/UnitBoundaries/"
+UnitBounds <- ReadSpatialBounds(Units_path = Units_path)
+
+terra::crs(rast_gli$A1) <- terra::crs(UnitBounds %>% filter(Unit== "A1"))
+mask(rast_gli$A1, UnitBounds %>% filter(Unit== "A1"))
+
+#plot the rasters
+gplot(rast_gli$D2) + 
+  geom_tile(aes(fill = value)) +
+  facet_wrap(~ variable) #+
+  scale_fill_gradient(low = 'black', high = 'yellow') 
+
+#-----------------------------------------------------------------------------------
+#clip by unit boundaries
+
+Units_path <- "../DateCreekData/data-raw/Harvests_Plants/UnitBoundaries/"
+Gaps_path <- "..//DateCreekData/data-raw/Harvests_Plants/GapCutsDateCreek/"
+UnitBounds <- ReadSpatialBounds(Units_path = Units_path)
+HR_gaps <- modifyPartCuts(Gaps_path = Gaps_path)
+
+#log volume:
+logvol <- SampleDateCreekGrids(Blocks = Blocks, UnitBounds = UnitBounds, HR_gaps = HR_gaps,
+                     sampl_rast = "Y", NoCells_ToSample = 40)
+#Add treatment
+logvol <- merge(logvol, DateCreekData::Treatments, by= "Unit")
+
+logvolmin_max <- logvol[,.(volMin= min(totallogvol), volMax=max(totallogvol),
+                           volMn=mean(totallogvol),volSd=sd(totallogvol)),
+                        by=c("Unit","Treatment", "timestep")]
+
+#field data -------------------------------------------------------------------------
+data_loc <- "D:/Github/DateCreekData/data-raw/CWD/"
+#run function for all years of volume:
+
+cwd_all <- CWD_vol_calc(dat_loc = data_loc, incl_sp_decay = TRUE)
+cwd_all <- merge(cwd_all, DateCreekData::Treatments, by="Unit")
+
+#clean the cwd data to make it compatible with carbon function
+#clean Species data
+cwd_all[,Sp:= ifelse(Sp=="","U",
+                ifelse(Sp=="u","U",
+                  ifelse(Sp=="Act","Ac",
+                    ifelse(Sp=="ep","Ep",
+                      Sp))))]
+
+#clean decay class data
+cwd_all[, Decay:= ifelse(Decay==1.5,2,
+                    ifelse(Decay==2.5,3,
+                      ifelse(Decay==3.5,4,
+                        ifelse(Decay==4.5,5,
+                               Decay))))]
+
+
+#apply the carbon function (need new species added)
+cwd_all[, cwdCarbonCalc(VolumeHa,Decay,Sp), by=seq_len(nrow(cwd_all))] #not working
+
+ggplot(cwd_all)+
+  #geom_point(aes(colour = factor(Treatment), shape = factor(Treatment)), size = 2)+
+  geom_point(aes(x = Yrs_Post,  y = VolumeHa, colour = Treatment))+
+  facet_wrap(~Treatment)+
+  geom_line(aes(x=Yrs_Post, y = VolumeHa, group=Unit, colour=Treatment))
+#good enough for now ???
+
+
+ggplot(cwd_all)+
+  geom_boxplot(aes(x = as.factor(Yrs_Post),  y = VolumeHa, colour = Treatment))+
+  facet_wrap(~Treatment)
+
+ggplot()+
+  geom_boxplot(data = cwd_all,
+               aes(x = as.factor(Yrs_Post),  y = VolumeHa, colour = Treatment))+
+  #geom_boxplot(data = logvol[timestep == "0"|timestep == "1"|timestep == "19"|timestep =="27"],
+   #            aes(x = timestep, y = totallogvol, colour = Treatment))+
+  facet_wrap(~Treatment)
+
+
+cwd_all_summary <- cwd_all[,.(volMn = mean(VolumeHa),
+                              volSd = sd(VolumeHa)),by=c("Unit","Yrs_Post","Treatment")]
+
+ggplot()+
+  #geom_point(aes(colour = factor(Treatment), shape = factor(Treatment)), size = 2)+
+  geom_point(data = cwd_all_summary, aes(x = Yrs_Post,  y = volMn, colour = Unit),size=2)+
+  #geom_ribbon(data = logvolmin_max, aes(x = as.numeric(timestep), ymin = volMin, 
+   #                                     ymax =volMax, group=Unit, fill=Unit,
+    #                                    alpha =0.1))+
+  geom_line(data=logvolmin_max, aes(x=as.numeric(as.character(timestep)),y=volMn, colour = Unit),size=1)+
+  facet_wrap(~Treatment)
+  
+
+#test the impact of using different sample sizes
+logvol_sizeTest <- c(10,20,40,50,100) %>%
+                      map(~ SampleDateCreekGrids(Blocks = Blocks, 
+                                                 UnitBounds = UnitBounds, HR_gaps = HR_gaps,
+                     sampl_rast = "Y", NoCells_ToSample = .x))
+logvol_ST <- lapply(logvol_sizeTest,function(dt){merge(dt, Unit_treatment, by= "Unit")})
+
+#take the mean of each unit/timestep
+logvol_mn <- lapply(logvol_ST, function(dt) {dt[, mean(totallogvol), by=.(Unit,timestep,Treatment)]})
+logvol_mn <- lapply(logvol_mn, function(dt)setnames(dt,"V1","mn_logVol"))
+
+ggplot()+
+  geom_point(data = cwd_all_summary, aes(x = Yrs_Post,  y = volMn, colour = Unit),size=2)+
+  geom_line(data=logvol_mn[[4]], aes(x=as.numeric(as.character(timestep)),y=mn_logVol, colour = Unit),size=2)+
+  facet_wrap(~Treatment)
+
+
+
+
+ggplot(DC_L_C_u_mod, aes(x = field, y = sortie, shape = Treatment, color = Treatment)) +
+  theme_bw() + 
+  theme(panel.border = element_blank(), 
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black"), 
+        axis.text = element_text(size = 15), 
+        axis.title = element_text(size = 18), 
+        legend.title = element_text(size = 18), 
+        legend.text = element_text(size = 17)) +
+  geom_point(aes(colour = factor(Treatment), shape = factor(Treatment)), size = 2) +
+  geom_abline() +
+  scale_x_continuous(breaks = seq(0, 300, by = 50), limits = c(0, 310)) +
+  scale_y_continuous(breaks = seq(0, 300, by = 50), limits = c(0, 310)) +
+  labs(x = "Observed Carbon (Mg/ha)", y = "Predicted Carbon (Mg/ha)", col = "Treatment", shape = "Treatment") +
+  scale_shape_manual(values = c(17, 16, 18, 15),
+                     breaks = c("CC", "HR", "LR", "NH"), 
+                     labels = c("CC", "HR", "LR", "NH")) +
+  scale_colour_manual(values = c("#F8766D", "#00BFC4", "#7CAE00", "#C77CFF"), 
+                      breaks = c("CC", "HR", "LR", "NH"), 
+                      labels = c("CC", "HR", "LR", "NH"))
+
+
+######## Summit Lake ------------------------------------------------------------------------
+path_outputs <- "D:/Github/sortie_carbonExtensionNote/Inputs/SORTIEruns/SummitLake/Outputs/extracted/"
+run_name <- "-0506"
+
+#create a single csv file for each plot from sortie outputs:
+rdSortieOutputs(out_path = path_outputs,run_name = run_name)
+
+outputs <- grep(".csv",
+                list.files(path_outputs, pattern = run_name, full.names = TRUE),
+                value = TRUE)
+
+
+
+
+
+
+
+sl_sortie <- calcSortieC(outputs = outputs, dead = TRUE, BEC = "SBS")
+
+treatsplit <- str_split(str_split(sl_sortie$Plot,"-", simplify=TRUE)[,3],
+                        "t",simplify=TRUE)[,2]
+sl_sortie[,Unit := as.numeric(treatsplit)]
+
+
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -1167,8 +1573,7 @@ dev.off()
 ##################
 ### Date Creek ###
 ##################
-
-
+######################################### FIELD DATA ####################################################
 
 
 ```
