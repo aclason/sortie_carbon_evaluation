@@ -34,3 +34,26 @@ vignettes/*.pdf
 # Temporary files created by R markdown
 *.utf8.md
 *.knit.md
+
+# Figures created
+Figures/
+
+Inputs/Data/
+
+Inputs/ParameterFiles/BaseFiles/
+
+Inputs/ParameterValues/
+
+Inputs/SORTIEruns/SummitLake/Outputs/extracted/
+
+Inputs/SORTIEruns/SummitLake/Outputs/
+
+Inputs/SORTIEruns/SummitLake/ParameterFiles/BaseFiles/
+
+Inputs/SORTIEruns/SummitLake/ParameterFiles/
+
+Inputs/SORTIEruns/SummitLake/ParameterValues/
+
+runtar.bat
+
+temp.xml
