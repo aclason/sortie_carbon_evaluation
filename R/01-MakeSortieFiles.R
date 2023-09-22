@@ -15,9 +15,10 @@ plots <- list.files(My_newvalsPath, pattern = "summit")
 #list files
 lstOfFiles <- data.frame("type"=c(0,rep(1,length(plots)),2),
                          "name"=c("SBS-0506.xml",
-                                  plots,"m.csv"))
+                                  plots,"ds_part.csv"))
 #add the inits to VariableNames
-sl_variable_names <- treelistDfn(initname = "Init.Dens_", numDigits = 1, diamMin = 82, diamMax = 88, diamInc = 2) 
+sl_variable_names <- treelistDfn(initname = "Init.Dens_", numDigits = 1, 
+                                 diamMin = 82, diamMax = 88, diamInc = 2) 
 
 rsortie::makeFiles(lstFiles = lstOfFiles, path_basexmls = My_basePath,
             path_newxmls = My_newxmlPath, path_newvals= My_newvalsPath,

@@ -14,11 +14,11 @@ knitr::opts_chunk$set(echo = TRUE)
 ls <- c("tidyverse", "data.table") # Data Management and Manipulation (removed plyr - might need to add back)
 ls <- append(ls, c("rsortie")) # sortie
 ls <- append(ls, c("lme4", "lmerTest", "Rmisc")) # analysis
-ls <- append(ls, c("DateCreekData","sortieCarbon")) #data wrangling packages - add summit lake when created
+ls <- append(ls, c("DateCreekData","SummitLakeData","sortieCarbon")) #data wrangling packages 
 #ls <- append(ls, c("DateCreekData","SummitLake_Data")) #data wrangling packages - add summit lake when created
 ls <- append(ls, c("treeCalcs")) #package for allometry and carbon calculations
 ls <- append(ls, c("terra","sf")) #spatial data
-
+library(doParallel)
 # Install if needed -- then load. 
 new.packages <- ls[!(ls %in% installed.packages()[,"Package"])]
 if(length(new.packages)) install.packages(new.packages)
@@ -64,6 +64,11 @@ sl_sortie <- merge(sl_sortie, SummitLakeData::Treatments, by.x = "Unit", by.y = 
 fwrite(sl_sortie,"./Inputs/Data/SL_sortieC.csv")
 
 ```
+
+
+
+
+
 
 
 2. Estimate carbon from SORTIE by tree type (alive,snag), plot, timestep 
@@ -226,7 +231,169 @@ unique(NH_tr[Type=="Adult"]$Dead.Code) # no adults were assigned a dead code of 
 ```
 
 
-Downed wood:
+4. Downed wood carbon
+```{r}
+#SBS
+
+# Modelled:
+MS_cwd_sl <- cwdc_sm[,.(MgHa = mean(MgHa), VolHa = mean(values)),
+                     by = c("treatment","unit","timestep","DecayClass")]
+FS_cwd_sl <- F_cwd_sl[,.(MgHa = mean(MgHa), VolHa = mean(MgHa)),
+                      by = c("treatment","unit","timestep","DecayClass")]
+
+MS_cwd_sl <- cwdc_sm[,.(MgHa = mean(MgHa), VolHa = mean(values)), 
+                     by = c("treatment","unit","timestep")]
+FS_cwd_sl <- F_cwd_sl[,.(MgHa = mean(MgHa), VolHa = mean(VolHa)),
+                      by = c("treatment","unit","timestep")]
+FS_cwd_sl_s <- F_cwd_sl_s[,.(MgHa = mean(MgHa), VolHa = mean(VolHa)),
+                      by = c("treatment","unit","timestep")]
+
+ggplot(MS_cwd_sl, aes(x=timestep, y = MgHa, group=unit, colour = treatment))+
+  geom_line(linewidth=1)+
+  stat_summary(geom = "ribbon", fun.min = min, fun.max = max, alpha = 0.1) +
+  #stat_summary(geom = "line", fun = mean)
+  theme_minimal()
+ggsave(filename = "DecayRates_SBS.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+
+#Volume - too high
+ggplot(NULL)+
+  geom_jitter(data = FS_cwd_sl, aes(x= timestep, y = VolHa, colour = treatment))+
+  geom_line(data = MS_cwd_sl, aes(x=timestep, y = VolHa, 
+                                  group = unit, colour = treatment), linetype = 1)+
+  geom_jitter(data = FS_cwd_sl_s, aes(x=timestep, y = VolHa, colour = treatment),
+              size = 1, shape = 2)
+
+#Carbon - too low
+ggplot(NULL)+
+  geom_jitter(data = FS_cwd_sl, aes(x= timestep, y = MgHa, colour = treatment))+
+  geom_line(data = MS_cwd_sl, aes(x=timestep, y = MgHa, 
+                                  group = unit, colour = treatment), linetype = 1)+
+  geom_jitter(data = FS_cwd_sl_s, aes(x=timestep, y = MgHa, colour = treatment),
+              size = 1, shape = 2)
+
+
+MS_cwd_sl <- cwdc_sm[,.(MgHa = mean(MgHa),
+                        VolHa = mean(values)), by = c("treatment","unit","timestep","DecayClass")]
+
+ggplot(MS_cwd_sl)+
+  geom_line(aes(x=timestep, y = MgHa, group=unit, colour = treatment))+
+  facet_wrap(~as.factor(DecayClass))
+ggsave(filename = "DecayRates_SBS.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+
+#ICH -------------------------------------------------------------------------------
+# Modelled:
+MS_cwd_dc <- cwdc_dc[,.(MgHa = mean(MgHa), VolHa = mean(values)),
+                       by = c("Treatment","Unit","timestep")]
+#MS_cwd_dc[, Yrs_Post:= as.numeric(timestep)]
+setnames(MS_cwd_dc, "timestep", "Yrs_Post")
+
+ggplot(MS_cwd_dc)+
+  geom_line(aes(x=Yrs_Post, y = MgHa, group = Unit, colour = Treatment))
+
+
+ggplot(NULL)+
+  geom_line(data = MS_cwd_dc, aes(x= Yrs_Post, y = VolHa, 
+                                  group = Unit, colour = Unit), linetype = 1)+
+  geom_line(data = FS_cwd_dc, aes(x=Yrs_Post, y = VolHa, 
+                                  group = Unit, colour = Unit), linetype = 2)
+
+MS_cwd_dc <- cwdc_dc[,.(MgHa = mean(MgHa), VolHa = mean(values)),
+                       by = c("Treatment","Unit","timestep","DecayClass")]
+
+ggplot(MS_cwd_dc)+
+  geom_line(aes(x=timestep, y = MgHa, group = Unit, colour = Unit))+
+  facet_wrap(~as.factor(DecayClass))
+
+
+# Field:
+#summarize by unit:
+F_cwd_dc[,.(plotVol = mean(VolumeHa), plotMg = mean(MgHa)), by = .(Unit, Year, Treatment)]
+
+# Sum by year, block, treatment
+plotTots <- F_cwd_dc[,sum(VolumeHa), by = .(Unit, Year, Unique_plot)]
+plotTots[,mean(V1), by = .(Unit, Year)]
+
+#need tog et all the zeros for sp-decay combos and merge with species groups for each unique plot:
+spTabl <- data.table(Sp = rep(unique(F_cwd_dc[Year == 1992,]$Sp),5),
+                     Decay = c(rep(1,10),rep(2,10),rep(3,10),rep(4,10),rep(5,10)))
+
+spGroups <- data.table(Sp =c("Hw","Cw","Ba","U","Bl","Sx","Pl","At","Ac","Ep"),
+                       SpGrp = c(1,2,1,1,1,1,1,3,3,3))
+
+spGrTabl <- merge(spTabl, spGroups, by = "Sp")
+#add the units and years:
+
+#plotUnit <- data.table(Unit = rep(DateCreekData::Treatments$Unit,4),
+ #                      Year = c(rep(1992,16),rep(1993,16),rep(2011,16),rep(2019,16)))
+
+#every year doesn't have the same number of plots, so need to get the year - plots combos to make
+#the master sampling list
+plotUnit_UP <- unique(F_cwd_dc[,.(Unit,Year,Unique_plot)])
+
+plotSp <- expand.grid(unique(F_cwd_dc$Unique_plot), unique(F_cwd_dc$Sp))
+
+merge(spGrTabl)
+
+
+
+#for now looping - but change to lapply? - over each plot
+for(ii in 1:length(unique(F_cwd_dc$Unique_plot))){
+  merge(F_cwd_dc, spGrTabl, by = c("Sp","Decay"), all.y = TRUE)
+}
+
+
+F_cwd_dc_0s <- merge(F_cwd_dc, spGrTabl, by = c("Sp","Decay"), all.y = TRUE)
+
+
+
+
+plotTots <- F_cwd_dc[,.(plotVol = sum(VolumeHa)), by = .(Unit, Year, Sp, Decay, Unique_plot)]
+plotMn <- plotTots[,.(plotmn = mean(plotVol)), by = .(Unit, Sp, Decay, Year)]
+
+
+
+F_cwd_dc[, .(VolumeHa= mean(VolumeHa)), by=c("Block","Unit", "Treatment", "Year", "PostHarvest")]
+
+
+FS_cwd_dc <- F_cwd_dc[,.(MgHa = mean(MgHa), VolHa = mean(VolumeHa)),
+                      by = c("Treatment","Unit","Yrs_Post")]
+MS_cwd_dc[,volha_cal := VolHa*10, by=seq_len(nrow(MS_cwd_dc))]
+
+calibr <- merge(FS_cwd_dc[Yrs_Post < 19], MS_cwd_dc,
+                by= c("Treatment","Unit","Yrs_Post"))
+calibr[, VolHa.x/VolHa.y, by = seq_len(nrow(calibr))]
+
+ggplot(FS_cwd_dc)+
+  geom_line(aes(x=Yrs_Post, y = MgHa, group = Unit, colour = Treatment))
+
+
+
+ggplot(NULL, aes(x = timestep,  y = C_unit, fill = Treatment, group = Treatment)) + 
+  geom_line(data = DC_L_C_u_T, aes(col = Treatment), size = 1.2) + 
+  theme(axis.line = element_line(colour = "black"), 
+        panel.background = element_blank(), 
+        legend.position = "top", 
+        legend.text = element_text(size = 25),
+        text = element_text(size = 28),
+        axis.text = element_text(size = 23),
+        axis.text.x = element_text(vjust = -1),
+        axis.text.y = element_text(hjust = 0.5),
+        axis.ticks.length = unit(7, "pt"),
+        axis.title.x = element_text(margin = margin(t = 14,  r = 0, b = 1, l = 0), face = "bold"),
+        axis.title.y = element_text(face = "bold")) +
+  scale_x_continuous(breaks = seq(0, 26, by = 2), expand = expansion(mult = c(0, 0.05))) +
+  scale_y_continuous(breaks = seq(0, 325, by = 50), limits = c(-1, 325)) +
+  ylab("Live carbon Mg/ha") + 
+  xlab('Years post-treatment') +
+  geom_ribbon(data = DC_L_C_u_T, aes(ymin = C_unit - ci, ymax = C_unit + ci),  
+              alpha=0.1, linetype="dashed",  color="grey") +
+  geom_point(data = DC_field_L_C_T, aes(shape = Treatment), size = 3 , 
+             position = position_dodge(width = 0.5)) +
+  scale_shape_manual(values = c(24, 21, 23, 22)) +
+  geom_errorbar(data = DC_field_L_C_T, aes(ymin = C_unit - ci, ymax = C_unit + ci), 
+                position = position_dodge(width = 1))
+
+```
 
 
 From SORTIE

@@ -57,3 +57,7 @@ Inputs/SORTIEruns/SummitLake/ParameterValues/
 runtar.bat
 
 temp.xml
+
+*.bat
+
+*.xml
