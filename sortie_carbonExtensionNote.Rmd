@@ -234,19 +234,8 @@ unique(NH_tr[Type=="Adult"]$Dead.Code) # no adults were assigned a dead code of 
 4. Downed wood carbon
 ```{r}
 #SBS
-
-# Modelled:
-MS_cwd_sl <- cwdc_sm[,.(MgHa = mean(MgHa), VolHa = mean(values)),
-                     by = c("treatment","unit","timestep","DecayClass")]
-FS_cwd_sl <- F_cwd_sl[,.(MgHa = mean(MgHa), VolHa = mean(MgHa)),
-                      by = c("treatment","unit","timestep","DecayClass")]
-
-MS_cwd_sl <- cwdc_sm[,.(MgHa = mean(MgHa), VolHa = mean(values)), 
-                     by = c("treatment","unit","timestep")]
-FS_cwd_sl <- F_cwd_sl[,.(MgHa = mean(MgHa), VolHa = mean(VolHa)),
-                      by = c("treatment","unit","timestep")]
-FS_cwd_sl_s <- F_cwd_sl_s[,.(MgHa = mean(MgHa), VolHa = mean(VolHa)),
-                      by = c("treatment","unit","timestep")]
+MS_cwd_sl
+FS_cwd_sl
 
 ggplot(MS_cwd_sl, aes(x=timestep, y = MgHa, group=unit, colour = treatment))+
   geom_line(linewidth=1)+
@@ -255,19 +244,24 @@ ggplot(MS_cwd_sl, aes(x=timestep, y = MgHa, group=unit, colour = treatment))+
   theme_minimal()
 ggsave(filename = "DecayRates_SBS.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
 
-#Volume - too high
+#Volume  
 ggplot(NULL)+
   geom_jitter(data = FS_cwd_sl, aes(x= timestep, y = VolHa, colour = treatment))+
   geom_line(data = MS_cwd_sl, aes(x=timestep, y = VolHa, 
                                   group = unit, colour = treatment), linetype = 1)+
-  geom_jitter(data = FS_cwd_sl_s, aes(x=timestep, y = VolHa, colour = treatment),
+  geom_point(data = FS_cwd_dc, aes(x= Yrs_Post, y = VolHa, colour = Treatment))
+  
+geom_jitter(data = FS_cwd_sl_s, aes(x=timestep, y = VolHa, colour = treatment),
               size = 1, shape = 2)
 
-#Carbon - too low
+#Carbon 
 ggplot(NULL)+
   geom_jitter(data = FS_cwd_sl, aes(x= timestep, y = MgHa, colour = treatment))+
   geom_line(data = MS_cwd_sl, aes(x=timestep, y = MgHa, 
                                   group = unit, colour = treatment), linetype = 1)+
+  geom_point(data = FS_cwd_dc, aes(x= Yrs_Post, y = MgHa, colour = Treatment))
+
+
   geom_jitter(data = FS_cwd_sl_s, aes(x=timestep, y = MgHa, colour = treatment),
               size = 1, shape = 2)
 
@@ -282,8 +276,14 @@ ggsave(filename = "DecayRates_SBS.jpg",path = "./Outputs/Figures/", device='jpeg
 
 #ICH -------------------------------------------------------------------------------
 # Modelled:
-MS_cwd_dc <- cwdc_dc[,.(MgHa = mean(MgHa), VolHa = mean(values)),
+#By pixel id - summ all the decay class volumes and carbon together
+M_cwd_dc <- cwdc_dc[,.(pixMgHa = sum(MgHa), pixVolHa = sum(values)),
+                       by = c("Treatment","Unit","timestep","ID")]
+#Add then take the average value across the whole unit
+MS_cwd_dc <- M_cwd_dc[,.(MgHa = mean(pixMgHa), VolHa = mean(pixVolHa)),
                        by = c("Treatment","Unit","timestep")]
+
+
 #MS_cwd_dc[, Yrs_Post:= as.numeric(timestep)]
 setnames(MS_cwd_dc, "timestep", "Yrs_Post")
 
@@ -291,14 +291,12 @@ ggplot(MS_cwd_dc)+
   geom_line(aes(x=Yrs_Post, y = MgHa, group = Unit, colour = Treatment))
 
 
-ggplot(NULL)+
-  geom_line(data = MS_cwd_dc, aes(x= Yrs_Post, y = VolHa, 
-                                  group = Unit, colour = Unit), linetype = 1)+
-  geom_line(data = FS_cwd_dc, aes(x=Yrs_Post, y = VolHa, 
-                                  group = Unit, colour = Unit), linetype = 2)
 
 MS_cwd_dc <- cwdc_dc[,.(MgHa = mean(MgHa), VolHa = mean(values)),
                        by = c("Treatment","Unit","timestep","DecayClass")]
+
+
+MS_cwd_dc[, Yrs_Post := timestep][,timestep:=NULL]
 
 ggplot(MS_cwd_dc)+
   geom_line(aes(x=timestep, y = MgHa, group = Unit, colour = Unit))+
@@ -306,66 +304,45 @@ ggplot(MS_cwd_dc)+
 
 
 # Field:
-#summarize by unit:
-F_cwd_dc[,.(plotVol = mean(VolumeHa), plotMg = mean(MgHa)), by = .(Unit, Year, Treatment)]
+#summarize by unit - only works if not including decay and species:
+#F_cwd_dc[,.(plotVol = mean(VolumeHa), plotMg = mean(MgHa)), by = .(Unit, Year, Treatment)]
 
-# Sum by year, block, treatment
-plotTots <- F_cwd_dc[,sum(VolumeHa), by = .(Unit, Year, Unique_plot)]
-plotTots[,mean(V1), by = .(Unit, Year)]
+#update Yrs post:
+F_cwd_dc[, Yrs_Post:= ifelse(Year == 1992,0,
+                       ifelse(Year == 1993, 1,
+                        ifelse(Year == 2011, 19, 27)))]
 
-#need tog et all the zeros for sp-decay combos and merge with species groups for each unique plot:
-spTabl <- data.table(Sp = rep(unique(F_cwd_dc[Year == 1992,]$Sp),5),
-                     Decay = c(rep(1,10),rep(2,10),rep(3,10),rep(4,10),rep(5,10)))
+#when including species decay, need to get the plot totals, then means then sum of means
+# sum all the piece volumes and carbon by plot
+plotTots <- F_cwd_dc[, .(plotVol = sum(VolumeHa), plotMg = sum(MgHa)),
+           by = .(Treatment, Unit, Year, Yrs_Post, Sp, Decay, Unique_plot)]
 
-spGroups <- data.table(Sp =c("Hw","Cw","Ba","U","Bl","Sx","Pl","At","Ac","Ep"),
-                       SpGrp = c(1,2,1,1,1,1,1,3,3,3))
+# take the mean vol and mg by species decay class and year across plots for each unit
+FS_cwd_dc_sp_d <- plotTots[, .(VolHa = mean(plotVol), MgHa = mean(plotMg)),
+                           by = .(Treatment, Unit, Year, Yrs_Post, Sp, Decay)]
 
-spGrTabl <- merge(spTabl, spGroups, by = "Sp")
-#add the units and years:
-
-#plotUnit <- data.table(Unit = rep(DateCreekData::Treatments$Unit,4),
- #                      Year = c(rep(1992,16),rep(1993,16),rep(2011,16),rep(2019,16)))
-
-#every year doesn't have the same number of plots, so need to get the year - plots combos to make
-#the master sampling list
-plotUnit_UP <- unique(F_cwd_dc[,.(Unit,Year,Unique_plot)])
-
-plotSp <- expand.grid(unique(F_cwd_dc$Unique_plot), unique(F_cwd_dc$Sp))
-
-merge(spGrTabl)
-
-
-
-#for now looping - but change to lapply? - over each plot
-for(ii in 1:length(unique(F_cwd_dc$Unique_plot))){
-  merge(F_cwd_dc, spGrTabl, by = c("Sp","Decay"), all.y = TRUE)
-}
-
-
-F_cwd_dc_0s <- merge(F_cwd_dc, spGrTabl, by = c("Sp","Decay"), all.y = TRUE)
-
-
-
-
-plotTots <- F_cwd_dc[,.(plotVol = sum(VolumeHa)), by = .(Unit, Year, Sp, Decay, Unique_plot)]
-plotMn <- plotTots[,.(plotmn = mean(plotVol)), by = .(Unit, Sp, Decay, Year)]
-
-
-
-F_cwd_dc[, .(VolumeHa= mean(VolumeHa)), by=c("Block","Unit", "Treatment", "Year", "PostHarvest")]
-
-
-FS_cwd_dc <- F_cwd_dc[,.(MgHa = mean(MgHa), VolHa = mean(VolumeHa)),
-                      by = c("Treatment","Unit","Yrs_Post")]
-MS_cwd_dc[,volha_cal := VolHa*10, by=seq_len(nrow(MS_cwd_dc))]
-
-calibr <- merge(FS_cwd_dc[Yrs_Post < 19], MS_cwd_dc,
-                by= c("Treatment","Unit","Yrs_Post"))
-calibr[, VolHa.x/VolHa.y, by = seq_len(nrow(calibr))]
+#if you want the overall volume of MgHa, then sum all the average values together by unit
+FS_cwd_dc <- FS_cwd_dc_sp_d[, .(VolHa = sum(VolHa), MgHa = sum(MgHa)),
+                 by = .(Treatment, Unit, Year, Yrs_Post)]
 
 ggplot(FS_cwd_dc)+
-  geom_line(aes(x=Yrs_Post, y = MgHa, group = Unit, colour = Treatment))
+  geom_line(aes(x=Yrs_Post, y = VolHa, group = Unit, colour = Treatment))
 
+
+
+# Field vs. Modelled
+ggplot(NULL)+
+  geom_line(data = MS_cwd_dc, aes(x= Yrs_Post, y = VolHa, 
+                                  group = Unit, colour = Unit), linetype = 2, linewidth = 1)+
+  geom_point(data = FS_cwd_dc, aes(x=Yrs_Post, y = VolHa, 
+                                  group = Unit, colour = Unit))
+
+
+ggplot(NULL)+
+  geom_line(data = MS_cwd_dc, aes(x= Yrs_Post, y = MgHa, 
+                                  group = Unit, colour = Unit), linetype = 1, linewidth = 2)+
+  geom_point(data = FS_cwd_dc, aes(x=Yrs_Post, y = MgHa, 
+                                  group = Unit, colour = Unit))
 
 
 ggplot(NULL, aes(x = timestep,  y = C_unit, fill = Treatment, group = Treatment)) + 

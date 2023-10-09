@@ -6,7 +6,7 @@ paramFiles_run <- "./Inputs/SORTIEruns/SummitLake/ParameterValues/"
 plots <- stringr::str_split(list.files(paramFiles_run, pattern = "summit"),".csv",
                             simplify = TRUE)[,1]
 
-files_2_ext <- list.files(out_path, pattern = "det", full.names = FALSE)
+files_2_ext <- list.files(out_path, pattern = "ds_part_det", full.names = FALSE)
 
 if(!dir.exists(paste0(out_path,"extracted/"))){
   dir.create(paste0(out_path,"extracted/"))
@@ -24,7 +24,7 @@ numcores <- 19
 parse_grids <- 1
 parse_trees <- 1
 # which years to parse
-yrs <- seq(0,30) #years vary by plot
+yrs <- seq(0,99) #years vary by plot
 
 t_p <- grep(paste(paste0("_",yrs,".xml"),collapse = "|"),treat_parse, value = TRUE)
 
@@ -109,9 +109,9 @@ treat_parse <- paste0(extFileDir,grep("[[:digit:]].xml$",
 
 numcores <- 16
 parse_grids <- 1
-parse_trees <- 1
+parse_trees <- 0
 # which years to parse
-yrs <- seq(0,1) 
+yrs <- seq(0,30) 
 
 t_p <- grep(paste(paste0("_",yrs,".xml"),collapse = "|"),treat_parse, value = TRUE)
 
