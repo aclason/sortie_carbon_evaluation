@@ -88,11 +88,11 @@ parallel::stopCluster(cl)
 
 #----------------------------------------------------------------------------------
 #ICH---------------------------------------------------------------------------
-out_path <- "../SORTIEparams/Outputs/ICH/Snags/" 
-paramFiles_run <- "../SORTIEparams/Inputs/ICH/Snags/ParameterValues/"
+out_path <- "../SORTIEparams/Outputs/ICH/CompMort/" 
+paramFiles_run <- "../SORTIEparams/Inputs/ICH/CompMort/ParameterValues/"
 plots <- DateCreekData::Treatments$Unit
 
-files_2_ext <- grep("-sn_d_init",list.files(out_path, pattern = "det.gz.tar", 
+files_2_ext <- grep("-cm",list.files(out_path, pattern = "det.gz.tar", 
                                      full.names = FALSE), value = TRUE)
 
 if(!dir.exists(paste0(out_path,"extracted/"))){
@@ -102,14 +102,14 @@ if(!dir.exists(paste0(out_path,"extracted/"))){
 extractFiles(itype = 1, exname = out_path, tarnames = files_2_ext)
 
 extFileDir <- paste0(out_path,"extracted/")
-treat_acronym <- "sn_d_init"
+treat_acronym <- "-cm"
 treat_parse <- paste0(extFileDir,grep("[[:digit:]].xml$",
                                       grep(treat_acronym,list.files(extFileDir),
                                            value=TRUE),value = TRUE))
 
 numcores <- 16
 parse_grids <- 1
-parse_trees <- 0
+parse_trees <- 0 #keep this at zero - takes way too long without only passing subplots
 # which years to parse
 yrs <- seq(0,30) 
 

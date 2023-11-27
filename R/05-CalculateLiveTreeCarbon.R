@@ -29,7 +29,7 @@ sl_sortie <- calcSortieC(outputs = tree_dt, dead = TRUE, BEC = "SBS")
 
 
 ### Field -------------------
-
+# use heights from 2019, use diam-height relationships before for carbon?
 
 
 #ICH--------------------------------------------------------------------------------------------

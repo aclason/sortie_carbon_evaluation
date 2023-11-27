@@ -25,43 +25,6 @@ if(length(new.packages)) install.packages(new.packages)
 lapply(ls, library, character.only = TRUE)  # load the required packages
 rm(ls, new.packages)
 
-```
-
-
-1. Calculate carbon from SORTIE
-```{r}
-#TO DO - ADD SEEDLINGS TO CARBON CALCS
-######### Date Creek -----------------------------------------------------------------------
-path_outputs <- "D:/Github/SORTIEparams/Outputs/ICH/Snags" #update this to the latest run path
-out_name <- "L-sn_br.csv" #update this to the latest run naming convention
-outputs <- list.files(path_outputs, pattern = out_name,full.names = TRUE)
-
-#create a single csv file for each plot from sortie outputs
-#for Date Creek the outputs are processed through the subplot function
-dc_sortie <- calcSortieC(outputs = outputs, dead = TRUE, BEC = "ICH")
-fwrite(dc_sortie, "./Inputs/Data/DC_sortieC.csv")  
-
-######## Summit Lake ------------------------------------------------------------------------
-path_outputs <- "D:/Sync/BVRC/FSD program/FCI/Partial cutting/Manuscript/Extension Note/SORTIE Carbon Extension Note/Files/Outputs/Extracted"
-run_name <- "-0506e"
-
-#create a single csv file for each plot from sortie outputs:
-rdSortieOutputs(out_path = path_outputs,run_name = run_name)
-
-outputs <- grep(".csv",
-                list.files(path_outputs, pattern = run_name, full.names = TRUE),
-                value = TRUE)
-
-sl_sortie <- calcSortieC(outputs = outputs, dead = TRUE, BEC = "SBS")
-
-treatsplit <- str_split(str_split(sl_sortie$Plot,"-", simplify=TRUE)[,3],
-                        "t",simplify=TRUE)[,2]
-sl_sortie[,Unit := as.numeric(treatsplit)]
-
-#merge with treatment data from SummitLakeData package:
-sl_sortie <- merge(sl_sortie, SummitLakeData::Treatments, by.x = "Unit", by.y = "unit")
-
-fwrite(sl_sortie,"./Inputs/Data/SL_sortieC.csv")
 
 ```
 
@@ -71,155 +34,138 @@ fwrite(sl_sortie,"./Inputs/Data/SL_sortieC.csv")
 
 
 
-2. Estimate carbon from SORTIE by tree type (alive,snag), plot, timestep 
-```{r}
-sl_sortie <- fread("./Inputs/Data/SL_sortieC.csv")
-dc_sortie <- fread("./Inputs/Data/DC_sortieC.csv")
-
-#Take out seedlings
-sl_sortie <- sl_sortie[Type != "Seedling"]
-dc_sortie <- dc_sortie[Type != "Seedling"]
-
-#### Summit Lake----------------------------------------------------------------------------- 
-sl_sortie[,TSH:=ifelse(Unit==4|Unit==15,timestep+3,
-                            timestep+1)]
-
-sl_u <- sl_sortie[,.(C_Unit_Ha = sum(C_tree, na.rm=TRUE)/4), by=.(Unit,TSH,Type,Species)]
-# For Summit Lake - full model runs = 200 x200m = 4 ha, so just applied it directly
-
-#add treatment codes:
-sl_u <- merge(sl_u, SummitLakeData::Treatments, by.x ="Unit", by.y = "unit")
-sl_u[,LiveDead:=ifelse(Type=="Snag","Snag","Live")]
-setnames(sl_u,"treatment","Treatment")
-sl_u[,Study:="Summit Lake"]
-
-
-#### Date Creek -----------------------------------------------------------------------------
-dc_sortie[,TSH:=timestep-1]
-# Sum carbon by Unit, plot, timestep, type (live, snag) and species
-dc_p <- dc_sortie[, .(C_plot= sum(C_tree, na.rm=TRUE)), by=.(Unit,SubPlot,TSH,Type, Species)]
-# Count the number of plots per unit and add to data set - varies by unit
-Unit_plots <- dc_p[TSH == -1, .(NumPlots = length(unique(SubPlot))), by = Unit]
-
-#Sum by unit and type and species
-dc_u <- dc_p[, .(C_Unit = sum(C_plot, na.rm = TRUE)), by = .(Unit, TSH,Type,Species)]
-
-dc_u <- merge(dc_u, Unit_plots, by = "Unit")
-dc_u[, PlotArea := 0.02*NumPlots]
-
-# Tree carbon by unit, timestep and Carbon (Mg)/Ha:
-dc_u[, C_Unit_Ha := C_Unit/PlotArea, by =.(Unit, TSH,Type,Species)]
-
-#add treatment codes:
-dc_u <- merge(dc_u, DateCreekData::Treatments, by.x ="Unit", by.y = "Unit")
-dc_u[,LiveDead:=ifelse(Type=="Snag","Snag","Live")][,NumPlots:=NULL][,PlotArea:=NULL][,C_Unit:=NULL]
-dc_u[,Study:="Date Creek"]
-
-#### Combine -------------------------------------------------------------------------------
-#combine sortie runs together
-dc_sl <- rbind(dc_u,sl_u)
-
-#### Plot/summarize -------------------------------------------------------------------------------
-#by species and type
-ggplot(dc_u) +
-  geom_point(aes(x = TSH, y = C_Unit_Ha, colour = Treatment))+
-  facet_grid(c("Type","Species"))
-  
-#by unit and live/dead
-dc_u_sum <- dc_u[,.(C_Unit_Ha = sum(C_Unit_Ha)), by=.(Unit,TSH,LiveDead,Treatment)]
-sl_u_sum <- sl_u[,.(C_Unit_Ha = sum(C_Unit_Ha)), by=.(Unit,TSH,LiveDead,Treatment)]
-dc_sl_sum <- dc_sl[,.(C_Unit_Ha = sum(C_Unit_Ha)), by=.(Study,Unit,TSH,LiveDead,Treatment)]
-
-
-ggplot(dc_sl_sum[TSH>0]) +
-  #geom_point(aes(x = timestep, y = C_Unit_Ha, colour = Treatment))+
-  geom_line(aes(x = TSH, y = C_Unit_Ha, colour = Treatment, group=Unit))+
-  geom_line(aes(x = TSH, y = C_Unit_Ha, colour = Treatment, group=Unit))+
-  xlab("Time since harvest")+
-  facet_grid(c("Study","LiveDead"))
-
-
-ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/CarbonLiveSnags.jpg")
-
-
-
-```
-
-Snags
 
 
 
 
 
 3. Snags recruitment, snag fall and snag longevity calculations
+
+very few snags are recruiting (<1% across treatments)
 ```{r}
-NH_tr <- DT_LS[Treatment=="NH"]
-NH_tr[, UniqXY := paste0(X,"_",Y), by = seq_len(nrow(NH_tr))]
-setkey(NH_tr,UniqXY)
+#08-SnagFall.R
+sl_ad_sn_sp
+setnames(sl_ad_sn_sp, c("unit","treatment"),c("Unit","Treatment"))
+sl_ad_sn
+setnames(sl_ad_sn, c("unit","treatment"),c("Unit","Treatment"))
+sl_snag_time
+setnames(sl_snag_time, c("unit","treatment"),c("Unit","Treatment"))
 
-#1. Label the row with whether it's a sapling, snag created, or snag fall
-ids <- unique(NH_tr$UniqXY)
-for(i in 1:length(ids)){
-  #looking for adults, and snags that will fall
-  NH_tr[UniqXY == ids[i], stType := ifelse(Type == "Adult","Adult",
-                                      ifelse(Type == "Snag" & Dead.Code =="Alive",
-                                             "Snag",
-                                        ifelse(Type=="Snag" & Dead.Code == "Natural",
-                                              "SnFallNext", "Sapling")))]
-  # identify if/when snag created
-  snagCh <- which(NH_tr[UniqXY == ids[i]]$Type != 
-              dplyr::lag(NH_tr[UniqXY == ids[i]]$Type))
-  if(length(snagCh) > 0){
-    NH_tr[UniqXY == ids[i]][snagCh]$stType <- "SnagCreate"  
-  }
-}
+#note - these won't start at time 0 as only years with snags recruited or fall are included
+dc_ad_sn_sp
+dc_ad_sn
 
-#2. Calculate Snag creation and snag fall rate
-NH_ad <- NH_tr[stType=="Adult", .N, by=.(Treatment, Unit, timestep)]
-setnames(NH_ad, "N", "NumAdult")
-NH_sn <- NH_tr[stType=="SnagCreate", .N, by=.(Treatment, Unit, timestep)]
-setnames(NH_sn, "N", "NumSnags")
-NH_sf <- NH_tr[stType=="SnFallNext", .N, by=.(Treatment, Unit, timestep)]
-setnames(NH_sf, "N", "NumSnagFall")
 
-NH_ad_sn <- merge(NH_ad, NH_sn, by=c("Treatment","Unit","timestep"))
-NH_ad_sn <- merge(NH_ad_sn, NH_sf, by=c("Treatment","Unit","timestep"))
-NH_ad_sn <- NH_ad_sn[,.(NumAdult, NumSnags, NumSnagFall,
-                SnagRecrRate = (NumSnags/(NumAdult+NumSnags))*100, 
-                SnagFallRate = (NumSnagFall/(NumSnags+NumSnagFall))*100),
-             by=c("Treatment","Unit","timestep")]
+# stats:
+library(betareg)
+library(lmtest)
+sl_ad_sn_sp[, .(mean(SnagRecrRate), mean(SnagFallRate)), by = "Treatment"]
 
-ggplot(NH_ad_sn)+
-  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Unit),size=4)+
-  geom_line(aes(x = timestep, y = SnagRecrRate, colour = Unit),size=1.5)+
+mod1 <- betareg(SnagRecrRate ~ Treatment + timestep, data = sl_ad_sn)
+null_mod <- betareg(SnagRecrRate ~ 1, data = sl_ad_sn)
+lr_test <- lrtest(null_mod, mod1)
+summary(mod1)
+
+summary(betareg(SnagFallRate ~ Treatment * timestep, data = sl_ad_sn_sp))
+
+
+# Figures:
+ggplot(dc_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = as.character(Unit)),size=4)+
+  geom_line(aes(x = timestep, y = SnagRecrRate, colour = as.character(Unit)),size=1.5)+
   theme_minimal()+
-  ylab("Snag Recruitment Rate (%)")
-#ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagRecruitRate.jpg")
+  ylab("Snag Recruitment (adults - snags) Rate (%)")
+ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagRecruitRate_newCM.jpg")
 
-ggplot(NH_ad_sn)+
-  geom_point(aes(x = timestep, y = SnagFallRate, colour = Unit),size=4)+
-  geom_line(aes(x = timestep, y = SnagFallRate, colour = Unit),size=1.5)+
+ggplot()+
+  #geom_point(aes(x = timestep, y = SnagRecrRate, colour = as.character(Unit)),size=2, data = dc_ad_sn)+
+  #geom_line(aes(x = timestep, y = SnagRecrRate, colour = as.character(Unit)),size=1, data = dc_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = as.character(Treatment)),size=2, data = sl_ad_sn)+
+  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = as.character(Treatment)),size=1, data = sl_ad_sn)+
   theme_minimal()+
-  ylab("Snag Fall Rate (%)")
-#ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagFallRate.jpg")
+  ylab("Snag Recruitment (adults - snags) Rate (%)")
 
-#3. how long are snags standing
-#of the snags that fall, how long were they standing? So first figure out which trees fall
-fallIDs <- unique(NH_tr[stType == "SnFallNext"]$UniqXY)
 
-#then count how many years they stood as snags
-for(i in 1:length(fallIDs)){
-  NH_tr[UniqXY == fallIDs[i] & Type == "Snag", TimeAsSnag := .N]
-}
+ggplot(NH_ad_sn_sp)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Species),size=4)+
+  #geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = Species))+
+  geom_line(aes(x = timestep, y = SnagRecrRate, colour = Species),size=0.5)+
+  scale_colour_manual(values = brewer.pal(9, "Set3"))+
+  theme_minimal()+
+  ylab("Snag Recruitment (adults - snags) Rate (%)")+
+  facet_wrap("Unit")
 
-SnagTime <- NH_tr[UniqXY %in% fallIDs & stType == "SnFallNext", .(Treatment,Unit,Species,DBH,UniqXY,TimeAsSnag)]
 
-ggplot(SnagTime)+
+ggplot(dc_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Treatment),size=4)+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
+  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = Treatment),size=1.5,
+              method = "lm")+
+  theme_minimal()+
+  ylab("Snag Recruitment (adults - snags) Rate (%)")
+
+#which trees are dying
+ggplot(dc_ad_sn_sp)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Treatment))+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
+  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = Treatment),
+              method = "lm")+
+  theme_minimal()+
+  facet_wrap("Species")+
+  ylab("Snag Recruitment (adults - snags) Rate (%)")
+
+
+ggplot(dc_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=4)+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
+  geom_smooth(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5,
+              method = "lm")+
+  theme_minimal()+
+  ylab("Snag Fall Rate (snags - snag fall) (%)")
+#ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagFallRate_newSnagDyn.jpg")
+
+ggplot(sl_ad_sn[timestep<30])+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=4)+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
+  geom_smooth(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5,
+              method = "lm")+
+  theme_minimal()+
+  ylab("Snag Fall Rate (snags - snag fall) (%)")
+
+ggplot(sl_ad_sn_sp)+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = Species),size=4)+
+  #geom_smooth(aes(x = timestep, y = SnagFallRate))+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Species),size=0.5)+
+  scale_colour_manual(values = RColorBrewer::brewer.pal(4, "Set3"))+
+  theme_minimal()+
+  ylab("Snag Fall Rate (snags - snag fall) Rate (%)")+
+  facet_wrap("Treatment")
+
+ggplot()+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=2, data = dc_ad_sn)+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=1, data = dc_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=2, data = sl_ad_sn)+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=1, data = sl_ad_sn)+
+  geom_smooth(aes(x = timestep, y = SnagFallRate),size=2, colour = "red", data = dc_ad_sn)+
+  geom_smooth(aes(x = timestep, y = SnagFallRate),size=2, colour = "blue", data = sl_ad_sn)+
+  theme_minimal()+
+  ylab("Snag Fall Rate (snags - snag fall) Rate (%)")
+
+
+ggplot(sl_snag_time)+
   geom_boxplot(aes(y = Unit, x = TimeAsSnag, fill = Unit))+
   theme_minimal()+
   ylab("Number of years standing as snag")+
   facet_wrap("Species")
 ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagLongevity.jpg")
+
+ggplot(sl_snag_time)+
+  geom_boxplot(aes(y = as.character(Species), x = TimeAsSnag, fill =Species))+
+  theme_minimal()+
+  ylab("Number of years standing as snag")
+  facet_wrap("Species")
+ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagLongevity.jpg")
+
 
 #from SORTIE parameters: 
 # tree fall probability (never becomes a snag)
@@ -248,8 +194,8 @@ ggsave(filename = "DecayRates_SBS.jpg",path = "./Outputs/Figures/", device='jpeg
 ggplot(NULL)+
   geom_jitter(data = FS_cwd_sl, aes(x= timestep, y = VolHa, colour = treatment))+
   geom_line(data = MS_cwd_sl, aes(x=timestep, y = VolHa, 
-                                  group = unit, colour = treatment), linetype = 1)+
-  geom_point(data = FS_cwd_dc, aes(x= Yrs_Post, y = VolHa, colour = Treatment))
+                                  group = unit, colour = treatment), linetype = 1)
+  #geom_point(data = FS_cwd_dc, aes(x= Yrs_Post, y = VolHa, colour = Treatment))
   
 geom_jitter(data = FS_cwd_sl_s, aes(x=timestep, y = VolHa, colour = treatment),
               size = 1, shape = 2)
@@ -258,8 +204,8 @@ geom_jitter(data = FS_cwd_sl_s, aes(x=timestep, y = VolHa, colour = treatment),
 ggplot(NULL)+
   geom_jitter(data = FS_cwd_sl, aes(x= timestep, y = MgHa, colour = treatment))+
   geom_line(data = MS_cwd_sl, aes(x=timestep, y = MgHa, 
-                                  group = unit, colour = treatment), linetype = 1)+
-  geom_point(data = FS_cwd_dc, aes(x= Yrs_Post, y = MgHa, colour = Treatment))
+                                  group = unit, colour = treatment), linetype = 1)#
+  #geom_point(data = FS_cwd_dc, aes(x= Yrs_Post, y = MgHa, colour = Treatment))
 
 
   geom_jitter(data = FS_cwd_sl_s, aes(x=timestep, y = MgHa, colour = treatment),
@@ -292,11 +238,11 @@ ggplot(MS_cwd_dc)+
 
 
 
-MS_cwd_dc <- cwdc_dc[,.(MgHa = mean(MgHa), VolHa = mean(values)),
-                       by = c("Treatment","Unit","timestep","DecayClass")]
+#MS_cwd_dc <- cwdc_dc[,.(MgHa = mean(MgHa), VolHa = mean(values)),
+ #                      by = c("Treatment","Unit","timestep","DecayClass")]
 
 
-MS_cwd_dc[, Yrs_Post := timestep][,timestep:=NULL]
+#MS_cwd_dc[, Yrs_Post := timestep][,timestep:=NULL]
 
 ggplot(MS_cwd_dc)+
   geom_line(aes(x=timestep, y = MgHa, group = Unit, colour = Unit))+
@@ -333,9 +279,9 @@ ggplot(FS_cwd_dc)+
 # Field vs. Modelled
 ggplot(NULL)+
   geom_line(data = MS_cwd_dc, aes(x= Yrs_Post, y = VolHa, 
-                                  group = Unit, colour = Unit), linetype = 2, linewidth = 1)+
+                                  group = Unit, colour = Treatment), linetype = 2, linewidth = 1)+
   geom_point(data = FS_cwd_dc, aes(x=Yrs_Post, y = VolHa, 
-                                  group = Unit, colour = Unit))
+                                  group = Unit, colour = Treatment))
 
 
 ggplot(NULL)+
@@ -615,6 +561,80 @@ sl_sortie[,Unit := as.numeric(treatsplit)]
 
 
 
+
+2. Estimate carbon from SORTIE by tree type (alive,snag), plot, timestep 
+```{r}
+sl_sortie <- fread("./Inputs/Data/SL_sortieC.csv")
+dc_sortie <- fread("./Inputs/Data/DC_sortieC.csv")
+
+#Take out seedlings
+sl_sortie <- sl_sortie[Type != "Seedling"]
+dc_sortie <- dc_sortie[Type != "Seedling"]
+
+#### Summit Lake----------------------------------------------------------------------------- 
+sl_sortie[,TSH:=ifelse(Unit==4|Unit==15,timestep+3,
+                            timestep+1)]
+
+sl_u <- sl_sortie[,.(C_Unit_Ha = sum(C_tree, na.rm=TRUE)/4), by=.(Unit,TSH,Type,Species)]
+# For Summit Lake - full model runs = 200 x200m = 4 ha, so just applied it directly
+
+#add treatment codes:
+sl_u <- merge(sl_u, SummitLakeData::Treatments, by.x ="Unit", by.y = "unit")
+sl_u[,LiveDead:=ifelse(Type=="Snag","Snag","Live")]
+setnames(sl_u,"treatment","Treatment")
+sl_u[,Study:="Summit Lake"]
+
+
+#### Date Creek -----------------------------------------------------------------------------
+dc_sortie[,TSH:=timestep-1]
+# Sum carbon by Unit, plot, timestep, type (live, snag) and species
+dc_p <- dc_sortie[, .(C_plot= sum(C_tree, na.rm=TRUE)), by=.(Unit,SubPlot,TSH,Type, Species)]
+# Count the number of plots per unit and add to data set - varies by unit
+Unit_plots <- dc_p[TSH == -1, .(NumPlots = length(unique(SubPlot))), by = Unit]
+
+#Sum by unit and type and species
+dc_u <- dc_p[, .(C_Unit = sum(C_plot, na.rm = TRUE)), by = .(Unit, TSH,Type,Species)]
+
+dc_u <- merge(dc_u, Unit_plots, by = "Unit")
+dc_u[, PlotArea := 0.02*NumPlots]
+
+# Tree carbon by unit, timestep and Carbon (Mg)/Ha:
+dc_u[, C_Unit_Ha := C_Unit/PlotArea, by =.(Unit, TSH,Type,Species)]
+
+#add treatment codes:
+dc_u <- merge(dc_u, DateCreekData::Treatments, by.x ="Unit", by.y = "Unit")
+dc_u[,LiveDead:=ifelse(Type=="Snag","Snag","Live")][,NumPlots:=NULL][,PlotArea:=NULL][,C_Unit:=NULL]
+dc_u[,Study:="Date Creek"]
+
+#### Combine -------------------------------------------------------------------------------
+#combine sortie runs together
+dc_sl <- rbind(dc_u,sl_u)
+
+#### Plot/summarize -------------------------------------------------------------------------------
+#by species and type
+ggplot(dc_u) +
+  geom_point(aes(x = TSH, y = C_Unit_Ha, colour = Treatment))+
+  facet_grid(c("Type","Species"))
+  
+#by unit and live/dead
+dc_u_sum <- dc_u[,.(C_Unit_Ha = sum(C_Unit_Ha)), by=.(Unit,TSH,LiveDead,Treatment)]
+sl_u_sum <- sl_u[,.(C_Unit_Ha = sum(C_Unit_Ha)), by=.(Unit,TSH,LiveDead,Treatment)]
+dc_sl_sum <- dc_sl[,.(C_Unit_Ha = sum(C_Unit_Ha)), by=.(Study,Unit,TSH,LiveDead,Treatment)]
+
+
+ggplot(dc_sl_sum[TSH>0]) +
+  #geom_point(aes(x = timestep, y = C_Unit_Ha, colour = Treatment))+
+  geom_line(aes(x = TSH, y = C_Unit_Ha, colour = Treatment, group=Unit))+
+  geom_line(aes(x = TSH, y = C_Unit_Ha, colour = Treatment, group=Unit))+
+  xlab("Time since harvest")+
+  facet_grid(c("Study","LiveDead"))
+
+
+ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/CarbonLiveSnags.jpg")
+
+
+
+```
 
 
 
@@ -1705,22 +1725,6 @@ dev.off()
 ```
 
 
-
-6. Coarse woody debris 
-```{r}
-###################
-### Summit Lake ###
-###################
-
-
-
-##################
-### Date Creek ###
-##################
-######################################### FIELD DATA ####################################################
-
-
-```
 
 
 

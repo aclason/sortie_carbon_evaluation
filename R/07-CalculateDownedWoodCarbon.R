@@ -77,10 +77,7 @@ FS_cwd_sl_sp_d <- plotTots[, .(VolHa = mean(plotVol), MgHa = mean(plotMg)),
 FS_cwd_sl <- FS_cwd_sl_sp_d[, .(VolHa = sum(VolHa), MgHa = sum(MgHa)),
                             by = .(treatment, unit, timestep)]
 
-
-
-
-#calc by groups (same as modelled)
+#calc by groups (same as modelled) OPTIONAL ----------------------------
 F_cwd_sl_s <- merge(F_cwd_sl, spGroups, by.x = "Species", by.y = "Sp", 
                     all.x = TRUE)
 F_cwd_sl_s[is.na(SpGrp), SpGrp := 1]
@@ -111,7 +108,7 @@ F_cwd_sl_s <- merge(F_cwd_sl_s[,.(unit,timestep,DecayClass,VolHa,MgHa)],
 #ICH-------------------------------------------------------------------------------------------
 
 # Model-----------------------------------------------------------
-out_path <- "../SORTIEParams/Outputs/ICH/Snags/extracted/" 
+out_path <- "../SORTIEParams/Outputs/ICH/CompMort/extracted/" 
 
 #read in the grids:
 gridFiles <- list.files(out_path, pattern = "grid", full.names = TRUE)
@@ -156,6 +153,13 @@ spGroups <- data.table(Sp =c("Hw","Cw","Ba", "Bl","Sx","Pl","At","Ac","Ep"),
                        SpGrp = c(1,2,1,1,1,1,3,3,3))
 
 cwdc_dc <- sortieCarbon::cwdCfromSORTIE(volGrid = vlogs_tr, spGroups = spGroups)
+
+#By pixel id - summ all the decay class volumes and carbon together
+M_cwd_dc <- cwdc_dc[,.(pixMgHa = sum(MgHa), pixVolHa = sum(values)),
+                    by = c("Treatment","Unit","timestep","ID")]
+#Add then take the average value across the whole unit
+MS_cwd_dc <- M_cwd_dc[,.(MgHa = mean(pixMgHa), VolHa = mean(pixVolHa)),
+                      by = c("Treatment","Unit","timestep")]
 
 
 # Field----------------------------------------------------------------
@@ -233,6 +237,23 @@ F_cwd_dc[, MgHa:= VolumeHa * AbsDens * StrRedFac * CarbConvFac, by = seq_len(nro
 #summarize by treatment, unit and year ----------------------------------------------------------
 F_cwd_dc <- merge(F_cwd_dc, DateCreekData::Treatments, by = "Unit", all.x = TRUE)
 
+#update Yrs post:
+F_cwd_dc[, Yrs_Post:= ifelse(Year == 1992,0,
+                             ifelse(Year == 1993, 1,
+                                    ifelse(Year == 2011, 19, 27)))]
+
+#when including species decay, need to get the plot totals, then means then sum of means
+# sum all the piece volumes and carbon by plot
+plotTots <- F_cwd_dc[, .(plotVol = sum(VolumeHa), plotMg = sum(MgHa)),
+                     by = .(Treatment, Unit, Year, Yrs_Post, Sp, Decay, Unique_plot)]
+
+# take the mean vol and mg by species decay class and year across plots for each unit
+FS_cwd_dc_sp_d <- plotTots[, .(VolHa = mean(plotVol), MgHa = mean(plotMg)),
+                           by = .(Treatment, Unit, Year, Yrs_Post, Sp, Decay)]
+
+#if you want the overall volume of MgHa, then sum all the average values together by unit
+FS_cwd_dc <- FS_cwd_dc_sp_d[, .(VolHa = sum(VolHa), MgHa = sum(MgHa)),
+                            by = .(Treatment, Unit, Year, Yrs_Post)]
 
 #return(F_cwd_dc)
 
