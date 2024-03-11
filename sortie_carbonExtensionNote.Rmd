@@ -241,6 +241,7 @@ ggplot(MS_cwd_dc)+
 #MS_cwd_dc <- cwdc_dc[,.(MgHa = mean(MgHa), VolHa = mean(values)),
  #                      by = c("Treatment","Unit","timestep","DecayClass")]
 
+```
 
 #MS_cwd_dc[, Yrs_Post := timestep][,timestep:=NULL]
 
