@@ -1,3 +1,9 @@
 # sortie_carbonExtensionNote
 
-This repository contains the code and data required to run analyses for the Extension Note: Validating the use of SORTIE in predicting carbon dynamics after partial harvesting in the Sub-Boreal Spruce and Interior Cedar Hemlock zones (link?).
+Include the code and data required to run analyses for the Publication: Predicting carbon recovery 
+after partial harvest in BC: Evaluating SORTIE in Sub-Boreal Spruce and Interior Cedar Hemlock.
+
+To run code, please download SummitLakeData and DataCreekData packages, as well as 
+the rsortie, treeCalcs, and sortieCarbon [maybe merge sortieCarbon into treeCalcs or rsortie?] from:
+
+Data required to initiate and validate model runs can be found at: [Zenedo]
