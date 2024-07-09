@@ -61,3 +61,23 @@ temp.xml
 *.bat
 
 *.xml
+
+00_archive - delete/extracted/
+
+00_archive - delete/outputs/
+
+00_archive - delete/
+
+03_out_sortie/02_summit_lake/
+
+02_init_sortie/01_date_creek/ParameterValues/
+
+02_init_sortie/02_summit_lake/New folder/ParameterValues/
+
+02_init_sortie/02_summit_lake/ParameterValues/
+
+02_init_sortie/02_summit_lake/FileLists/
+
+*.jpeg
+
+HarvestTrees.txt
