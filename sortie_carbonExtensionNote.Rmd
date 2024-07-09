@@ -236,6 +236,66 @@ unique(NH_tr[Type=="Adult"]$Dead.Code) # no adults were assigned a dead code of 
 
 
 
+ggplot(MS_cwd_sl, aes(x=timestep, y = MgHa, group=unit, colour = treatment))+
+  geom_line(linewidth=1)+
+  stat_summary(geom = "ribbon", fun.min = min, fun.max = max, alpha = 0.1) +
+  #stat_summary(geom = "line", fun = mean)
+  theme_minimal()
+ggsave(filename = "DecayRates_SBS.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+
+#Volume  
+ggplot(NULL)+
+  geom_jitter(data = FS_cwd_sl, aes(x= timestep, y = VolHa, colour = treatment))+
+  geom_line(data = MS_cwd_sl, aes(x=timestep, y = VolHa, 
+                                  group = unit, colour = treatment), linetype = 1)
+  #geom_point(data = FS_cwd_dc, aes(x= Yrs_Post, y = VolHa, colour = Treatment))
+  
+geom_jitter(data = FS_cwd_sl_s, aes(x=timestep, y = VolHa, colour = treatment),
+              size = 1, shape = 2)
+
+#Carbon 
+ggplot(NULL)+
+  geom_jitter(data = FS_cwd_sl, aes(x= timestep, y = MgHa, colour = treatment))+
+  geom_line(data = MS_cwd_sl, aes(x=timestep, y = MgHa, 
+                                  group = unit, colour = treatment), linetype = 1)#
+  #geom_point(data = FS_cwd_dc, aes(x= Yrs_Post, y = MgHa, colour = Treatment))
+
+
+  geom_jitter(data = FS_cwd_sl_s, aes(x=timestep, y = MgHa, colour = treatment),
+              size = 1, shape = 2)
+
+
+MS_cwd_sl <- cwdc_sm[,.(MgHa = mean(MgHa),
+                        VolHa = mean(values)), by = c("treatment","unit","timestep","DecayClass")]
+
+ggplot(MS_cwd_sl)+
+  geom_line(aes(x=timestep, y = MgHa, group=unit, colour = treatment))+
+  facet_wrap(~as.factor(DecayClass))
+ggsave(filename = "DecayRates_SBS.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+
+#ICH -------------------------------------------------------------------------------
+# Modelled:
+#By pixel id - summ all the decay class volumes and carbon together
+M_cwd_dc <- cwdc_dc[,.(pixMgHa = sum(MgHa), pixVolHa = sum(values)),
+                       by = c("Treatment","Unit","timestep","ID")]
+#Add then take the average value across the whole unit
+MS_cwd_dc <- M_cwd_dc[,.(MgHa = mean(pixMgHa), VolHa = mean(pixVolHa)),
+                       by = c("Treatment","Unit","timestep")]
+
+
+#MS_cwd_dc[, Yrs_Post:= as.numeric(timestep)]
+setnames(MS_cwd_dc, "timestep", "Yrs_Post")
+
+ggplot(MS_cwd_dc)+
+  geom_line(aes(x=Yrs_Post, y = MgHa, group = Unit, colour = Treatment))
+
+
+
+#MS_cwd_dc <- cwdc_dc[,.(MgHa = mean(MgHa), VolHa = mean(values)),
+ #                      by = c("Treatment","Unit","timestep","DecayClass")]
+
+```
+
 #MS_cwd_dc[, Yrs_Post := timestep][,timestep:=NULL]
 
 ggplot(MS_cwd_dc)+
