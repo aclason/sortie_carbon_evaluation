@@ -13,7 +13,7 @@ out_path <- file.path("04_out_carbon")
 My_newvalsPath <- file.path("02_init_sortie","02_summit_lake","ParameterValues")
 sum_in_path <- file.path(in_path, "02_summit_lake","extracted")
 
-run_name <- "m-"
+run_name <- "ds-"
 outfiles <- grep(run_name, list.files(sum_in_path, pattern = ".csv", 
                                       full.names = TRUE), value = TRUE)
 plots <- stringr::str_split(list.files(My_newvalsPath, pattern = "summit"),".csv",

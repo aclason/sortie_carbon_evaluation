@@ -34,8 +34,6 @@ setnames(plantTrees, "Plot","unit")
 merge(SummitLakeData::Treatments, plantTrees, by = "unit")
 
 
-#3. cwd from nearby Bruce Rogers trial (instead of similar to Date Creek)
-
 
 
 

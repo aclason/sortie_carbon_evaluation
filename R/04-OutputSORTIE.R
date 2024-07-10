@@ -1,26 +1,32 @@
 library(rsortie)
-
+library(doParallel)
 
 ######################### PROCESS SORTIE OUTPUTS ################################
 #SBS---------------------------------------------------------------------------
+in_dir <- file.path("03_out_sortie", "02_summit_lake")
+plots_path <- file.path(in_dir,"ParameterValues") 
+
+#plots
+plots <- list.files(plots_path, pattern = "summit")
 
 out_path <- file.path(base_dir, "./Inputs/SORTIEruns/SummitLake/Outputs/")
 paramFiles_run <- file.path(base_dir, "./Inputs/SORTIEruns/SummitLake/ParameterValues/")
-plots <- stringr::str_split(list.files(paramFiles_run, pattern = "summit"),".csv",
+
+plot_root <- stringr::str_split(plots,".csv",
                             simplify = TRUE)[,1]
 
-files_2_ext <- list.files(out_path, pattern = "ds_part_det", full.names = FALSE)
 
-if(!dir.exists(paste0(out_path,"extracted/"))){
-  dir.create(paste0(out_path,"extracted/"))
+files_2_ext <- list.files(in_dir, pattern = "ds_det", full.names = FALSE)
+
+if(!dir.exists(file.path(in_dir,"extracted"))){
+  dir.create(file.path(in_dir,"extracted"))
 }
 #if need to extract files:
-extractFiles(itype = 1, exname = out_path, tarnames = files_2_ext)
+extractFiles(itype = 1, exname = paste0(in_dir,"/"), tarnames = files_2_ext)
 
-extFileDir <- paste0(out_path,"extracted/")
-extFileDir <- "D:/Github/sortie_carbonExtensionNote/Inputs/02_sortie_runs/03_sortie_outputs/02_summit_lake/extracted"
-treat_acronym <- "ds_part"
-treat_parse <- paste0(extFileDir,grep("[[:digit:]].xml$",
+extFileDir <- file.path(in_dir,"extracted")
+treat_acronym <- "ds"
+treat_parse <- paste0(extFileDir,"/",grep("[[:digit:]].xml$",
                                       grep(treat_acronym,list.files(extFileDir),
                                            value=TRUE),value = TRUE))
 
@@ -28,7 +34,7 @@ numcores <- 19
 parse_grids <- 1
 parse_trees <- 1
 # which years to parse
-yrs <- seq(0,99) #years vary by plot
+yrs <- seq(0,30) #years vary by plot
 
 t_p <- grep(paste(paste0("_",yrs,".xml"),collapse = "|"),treat_parse, value = TRUE)
 
@@ -38,8 +44,8 @@ t_p <- grep(paste(paste0("_",yrs,".xml"),collapse = "|"),treat_parse, value = TR
 
 #split treat_parse into treatments for parallel processing
 t_p_l <- list()
-for(i in 1:length(plots)){
-  t_p_l[[i]] <- grep(plots[[i]],t_p, value = TRUE)
+for(i in 1:length(plot_root)){
+  t_p_l[[i]] <- grep(plot_root[[i]],t_p, value = TRUE)
 }
 
 
@@ -50,7 +56,7 @@ parallel::clusterEvalQ(cl, c(library(foreach),library(tidyverse),
                              library(stringr))) 
 parallel::clusterExport(cl=cl, varlist=c("parse_grids","parse_trees",
                                          "treat_acronym","extFileDir",
-                                         "t_p_l"))
+                                         "t_p_l", "plot_root"))
 
 g_dt_all <- foreach::foreach(i=1:length(t_p_l))%dopar%{
   #g_dt_all <- foreach::foreach(i=1:1)%dopar%{
@@ -59,7 +65,7 @@ g_dt_all <- foreach::foreach(i=1:length(t_p_l))%dopar%{
   
   for(ii in 1:length(t_p_l[[i]])){
     # identify which treatment, year and unit is being parsed
-    unn <- plots[stringr::str_detect(t_p_l[[i]][ii],plots)]
+    unn <- plot_root[stringr::str_detect(t_p_l[[i]][ii],plot_root)]
     yr <- sub('\\.xml$', '',stringr::str_split(t_p_l[[i]][ii],"det_")[[1]][2]) 
     print(paste("parsing:",unn,"timestep",yr))
     
@@ -81,10 +87,10 @@ g_dt_all <- foreach::foreach(i=1:length(t_p_l))%dopar%{
     
   }
   if(parse_grids == 1){
-    fwrite(g_dt, paste0(extFileDir,treat_acronym,"-",unn,"-grids.csv"), append=FALSE)  
+    fwrite(g_dt, paste0(extFileDir,"/",treat_acronym,"-",unn,"-grids.csv"), append=FALSE)  
   }
   if(parse_trees == 1){
-    fwrite(t_dt, paste0(extFileDir,treat_acronym,"-",unn,"-trees.csv"), append=FALSE)  
+    fwrite(t_dt, paste0(extFileDir,"/",treat_acronym,"-",unn,"-trees.csv"), append=FALSE)  
   }
 }
 
