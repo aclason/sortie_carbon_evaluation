@@ -1,22 +1,16 @@
-
 library(data.table)
-`%dopar%` <- foreach::`%dopar%`
-
+library(rsortie)
 ################################ RUN SORTIE ####################################
 #SBS---------------------------------------------------------------------------
 #1. update the number of years for the run
 #2. run Sortie in parallel. It's built to use one core/run, but future development could
 #allow more flexibility in run setup
+in_dir <- file.path("02_init_sortie","02_summit_lake","ParameterFiles")
 
-loc_path <- "./02_init_sortie/02_summit_lake/" 
-My_basePath <- paste0(loc_path,"ParameterFiles/BaseFiles/") 
-My_newxmlPath <- paste0(loc_path,"ParameterFiles/") 
-My_newvalsPath <- paste0(loc_path,"ParameterValues/") 
-
-files2run <- list.files(My_newxmlPath,"logProps.xml", full.names = TRUE)
-files2run <- list.files(My_newxmlPath,"ds_part.xml", full.names = TRUE)
-files2run <- grep("SBS-s",list.files(My_newxmlPath, full.names = TRUE), 
-                  value = TRUE)
+files2run <- list.files(in_dir,"logProps.xml", full.names = TRUE)
+#files2run <- list.files(My_newxmlPath,"ds_part.xml", full.names = TRUE)
+#files2run <- grep("SBS-s",list.files(My_newxmlPath, full.names = TRUE), 
+ #                 value = TRUE)
 
 #1. update the number of years for the run
 updateNumYears(files2run, 30)

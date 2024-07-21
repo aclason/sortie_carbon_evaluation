@@ -83,3 +83,15 @@ temp.xml
 HarvestTrees.txt
 
 02_init_sortie/02_summit_lake/archive/
+
+01_data/SBS_nat_regen.csv
+
+01_data/SBS_plantedTrees.csv
+
+02_init_sortie/02_summit_lake/Productivity/
+
+04_out_carbon/
+
+archive/
+
+05_out_analysis/

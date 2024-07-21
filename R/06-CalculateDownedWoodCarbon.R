@@ -1,41 +1,49 @@
 library(data.table)
+library(SummitLakeData)
+library(DateCreekData)
+library(treeCalcs)
 
+in_path <- file.path("03_out_sortie")
+out_path <- file.path("04_out_carbon")
 
-######################### CALCULATE DOWNED WOOD CARBON ################################
-#SBS---------------------------------------------------------------------------
+#SBS--------------------------------------------------------------------------------------------
 
-# Model-----------------------------------------------------------
-out_path <- "./Inputs/SORTIEruns/SummitLake/Outputs/extracted/" 
+### SORTIE ----------------------------------------------------
+My_newvalsPath <- file.path("02_init_sortie","02_summit_lake","ParameterValues")
+sum_in_path <- file.path(in_path, "02_summit_lake","extracted")
+
+run_name <- "ds-nci_si_6"
+gridFiles <- grep(run_name, list.files(sum_in_path, pattern = "grids.csv", 
+                                      full.names = TRUE), value = TRUE)
+plots <- stringr::str_split(list.files(My_newvalsPath, pattern = "summit"),".csv",
+                            simplify = TRUE)[,1]
 
 #read in the grids:
-gridFiles <- grep("ds_part",list.files(out_path, pattern = "grid",
-                                       full.names = TRUE), value = TRUE)
-gridFiles <- grep("m-",list.files(out_path, pattern = "grid",
-                                       full.names = TRUE), value = TRUE)
-
 grid_list <- lapply(gridFiles, fread)
 grid_dt <- rbindlist(grid_list)
+
+#clip to centre 1 ha:
+#grid_dt <- grid_dt[X >50 & X <150 & Y >50 & Y <150]
 
 #don't need to clip to unit boundary (whole plot in "unit")
 grid_to_output <- grep("vlog",unique(grid_dt$colnames), value = TRUE)
 vlogs <- grid_dt[colnames %in% grid_to_output]
-vlogs[, unit := tstrsplit(Unit, "summit", fixed=TRUE, keep = 2)]
+vlogs[, unit := tstrsplit(Unit, "summit_", fixed=TRUE, keep = 2)]
 vlogs[,Unit:=NULL]
 vlogs[,timestep := as.numeric(as.character(timestep))]
 
 #add grouping columns to log volumes (already reported in vol/ha)
 tr <- SummitLakeData::Treatments[, unit := as.character(unit)]
 vlogs_tr <- merge(vlogs, tr, by = "unit")
-vlogs_tr <- merge(vlogs_tr, sortieCarbon::vollog_cat, by.x = "colnames", by.y = "grid")          
-
+vlogs_tr <- merge(vlogs_tr, treeCalcs::vollog_cat, by.x = "colnames", by.y = "grid")          
 
 #vm <- vlogs_tr[, mean(values), by=.(treatment,unit,timestep,group,size,decay)]
-
 spGroups <- data.table(Sp =c("Sx","Pl","Bl","At","Lw","Fd","Ac","Ep"),
                        SpGrp = c(1,1,1,3,1,1,3,3))
 #just keep the rows of the species that are relevant
 
-cwdc_sm <- sortieCarbon::cwdCfromSORTIE(volGrid = vlogs_tr, spGroups = spGroups)
+cwdc_sm <- treeCalcs::sortie_cwd_carbon(volGrid = vlogs_tr, spGroups = spGroups)
+
 
 #By pixel id - summ all the decay class volumes and carbon together
 M_cwd_sl <- cwdc_sm[,.(pixMgHa = sum(MgHa), pixVolHa = sum(values)),
@@ -43,16 +51,31 @@ M_cwd_sl <- cwdc_sm[,.(pixMgHa = sum(MgHa), pixVolHa = sum(values)),
 #Add then take the average value across the whole unit
 MS_cwd_sl <- M_cwd_sl[,.(MgHa = mean(pixMgHa), VolHa = mean(pixVolHa)),
                       by = c("treatment","unit","timestep")]
+MS_cwd_sl[, Year := ifelse(unit == 4, 1994 + timestep,
+                            ifelse(unit == 15, 1994 + timestep,
+                                   1992 + timestep))]
+
+saveRDS(MS_cwd_sl, file.path(out_path,"MS_cwd_sl.RDS"))
+#MS_cwd_sl[,Unit:=as.numeric(unit)] #deal with this earlier
+
+MS_cwd_sl_dc <- cwdc_sm[,.(pixMgHa = sum(MgHa), pixVolHa = sum(values)),
+                        by = c("treatment","unit","timestep","DecayClass","point_id")]
+#Add then take the average value across the whole unit
+MS_cwd_sl_dc <- MS_cwd_sl_dc[,.(MgHa = mean(pixMgHa), VolHa = mean(pixVolHa)),
+                      by = c("treatment","unit","timestep","DecayClass")]
+MS_cwd_sl_dc[, Year := ifelse(unit == 4, 1994 + timestep,
+                           ifelse(unit == 15, 1994 + timestep,
+                                  1992 + timestep))]
+saveRDS(MS_cwd_sl_dc, file.path(out_path,"MS_cwd_sl_dc.RDS"))
+
 
 # Field----------------------------------------------------------------
 #calculate volumes from data 
-F_cwd_sl <- SummitLakeData::CWD_2021_Vol_calc(CWD_dat = "C:/GitHub/SummitLakeData/data-raw/EP1162CWDsurvey2020-2021.csv",
-                                              Horiz_dat = "C:/GitHub/SummitLakeData/data-raw/EP1162CWDsurveyTransectLines2020-2021.csv",
+F_cwd_sl <- SummitLakeData::CWD_2021_Vol_calc(CWD_dat = "D:/GitHub/SummitLakeData/data-raw/EP1162CWDsurvey2020-2021.csv",
+                                              Horiz_dat = "D:/GitHub/SummitLakeData/data-raw/EP1162CWDsurveyTransectLines2020-2021.csv",
                                               out_carbon_comp = TRUE)
 
 #F_cwd_sl[, DecayClass:= as.numeric(DecayClass)]
-
-
 F_cwd_sl <- merge(F_cwd_sl, treeCalcs::cwdC_conv_table[is.na(BECzone)| BECzone=="SBS",
                                                        .(BCname,DecayClass,
                                                           AbsoluteDensity,
@@ -71,25 +94,26 @@ F_cwd_sl[, MgHa:= VolumeHa * AbsDens * StrRedFac * CarbConvFac,
 #get treatment, unit and year
 #F_cwd_sl[, unit:= tstrsplit(Plot, "-", fixed=TRUE, keep = 2)]
 #F_cwd_sl[,`:=`(unit = as.numeric(unit),timestep = (Year - 1992))]
-F_cwd_sl[,`:=`(timestep = (Year - 1992))]
+#F_cwd_sl[,`:=`(timestep = (Year - 1992))]
 #SummitLakeData::Treatments[, Unit := as.numeric(unit)] #stop fliflopping - fix above
-F_cwd_sl <- merge(F_cwd_sl[,.(Unit,timestep,Decay,Sp,VolumeHa,MgHa)], 
+F_cwd_sl <- merge(F_cwd_sl[,.(Unit,Year,Decay,Sp,VolumeHa,MgHa)], 
                   SummitLakeData::Treatments, by.x = "Unit", by.y = "unit")
 
 #when including species decay, need to get the plot totals, then means then sum of means
 # sum all the piece volumes and carbon by plot - doesn't apply ot Summit Lake as there's 
 # only one plot/unit
 plotTots <- F_cwd_sl[, .(plotVol = sum(VolumeHa), plotMg = sum(MgHa)),
-                     by = .(treatment, Unit, timestep, Sp, Decay)]
+                     by = .(treatment, Unit, Year, Sp, Decay)]
 
 # take the mean vol and mg by species decay class and year across plots for each unit
 # still the same as no repeats
 FS_cwd_sl_sp_d <- plotTots[, .(VolHa = mean(plotVol), MgHa = mean(plotMg)),
-                           by = .(treatment, Unit, timestep, Sp, Decay)]
+                           by = .(treatment, Unit, Year, Sp, Decay)]
 
 #if you want the overall volume of MgHa, then sum all the average values together by unit
 FS_cwd_sl <- FS_cwd_sl_sp_d[, .(VolHa = sum(VolHa), MgHa = sum(MgHa)),
-                            by = .(treatment, Unit, timestep)]
+                            by = .(treatment, Unit, Year)]
+saveRDS(FS_cwd_sl, file.path(out_path,"FS_cwd_sl.RDS"))
 
 #calc by groups (same as modelled) OPTIONAL ----------------------------
 F_cwd_sl <- merge(F_cwd_sl, treeCalcs::cwdC_conv_table[is.na(BECzone)| BECzone=="SBS",
@@ -110,10 +134,7 @@ F_cwd_sl[, MgHa:= VolumeHa * AbsDens * StrRedFac * CarbConvFac,
 #get treatment, unit and year
 #F_cwd_sl[, unit:= tstrsplit(Plot, "-", fixed=TRUE, keep = 2)]
 #F_cwd_sl[,`:=`(unit = as.numeric(unit),timestep = (Year - 1992))]
-F_cwd_sl[,`:=`(timestep = (Year - 1992))]
-
-
-
+#F_cwd_sl[,`:=`(timestep = (Year - 1992))]
 F_cwd_sl_s <- merge(F_cwd_sl, spGroups, by.x = "Sp", by.y = "Sp", 
                     all.x = TRUE)
 F_cwd_sl_s[is.na(SpGrp), SpGrp := 1]
@@ -136,9 +157,10 @@ F_cwd_sl_s[, MgHa := VolumeHa*DecFac*mnAbsDens*mnCarbConc, by=seq_len(nrow(F_cwd
 #F_cwd_sl_s[, unit:= tstrsplit(Plot, "-", fixed=TRUE, keep = 2)]
 #F_cwd_sl_s[,`:=`(unit = as.numeric(unit),timestep = (Year - 1992))]
 #SummitLakeData::Treatments[, unit := as.numeric(unit)] #stop fliflopping - fix above
-F_cwd_sl_s <- merge(F_cwd_sl_s[,.(Unit,timestep,Decay,VolumeHa,MgHa)], 
+F_cwd_sl_s <- merge(F_cwd_sl_s[,.(Unit,Year,Decay,VolumeHa,MgHa)], 
                   SummitLakeData::Treatments, by.x = "Unit",by.y = "unit")
 
+saveRDS(F_cwd_sl_s, file.path(out_path,"FS_cwd_sl_sg.RDS")) #by species groups
 
 
 

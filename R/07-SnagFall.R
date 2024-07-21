@@ -4,37 +4,65 @@
 library(data.table)
 library(purrr)
 library(dplyr)
-#SBS---------------------------------------------------------------------------
-out_path <- file.path(base_dir,"./Inputs/SORTIEruns/SummitLake/Outputs/extracted") 
-#these are created from detailed output extraction, to match the Date Creek runs below.
-#Extracting all live trees from those large runs is slow in R compared to C++ (sortie GUI)
 
-out_files <- list.files(path = out_path, pattern = "trees.csv",
-                        full.names = TRUE)
-sl_out <- map(out_files, fread)  #fread(out_files)
-sl_out <- rbindlist(sl_out)
-sl_out[, UniqXY := paste0(Unit,"_",X,"_",Y)]
-setkey(sl_out,UniqXY)
+in_path <- file.path("03_out_sortie")
+out_path <- file.path("04_out_carbon")
+
+
+#SBS---------------------------------------------------------------------------
+My_newvalsPath <- file.path("02_init_sortie","02_summit_lake","ParameterValues")
+sum_in_path <- file.path(in_path, "02_summit_lake","extracted")
+
+run_name <- "ds-nci_si_6"
+outfiles <- grep(run_name, list.files(sum_in_path, pattern = ".csv", 
+                                      full.names = TRUE), value = TRUE)
+plots <- stringr::str_split(list.files(My_newvalsPath, pattern = "summit"),".csv",
+                            simplify = TRUE)[,1]
+
+tree_files <- grep("trees",outfiles, value = TRUE)
+tree_dt <- rbindlist(lapply(tree_files, fread))
+#clip to centre 1 ha:
+tree_dt <- tree_dt[X >50 & X <150 & Y >50 & Y <150]
+
+tree_dt[tree_species == "Subalpine_Fir" & Unit == "summit_8" & X == 133.798]
+tree_dt[Type == "Snag" & dead == 0]
+tree_dt[, UniqXY := paste0(Unit,"_",X,"_",Y)]
+setkey(tree_dt,UniqXY)
 
 #1. Label the row with whether a snag is created, or snag falls. 
 #This won't capture trees that fall without becoming snags
-
 #which trees are snags at some point
-ids <- unique(sl_out[Type=="Snag"]$UniqXY)
+ids <- unique(tree_dt[Type=="Snag"]$UniqXY)
 
 #just adults and snags where somewhere they becaome snags
-sl_out_as <- sl_out[Type == "Adult" | Type =="Snag"]
+sl_out_as <- tree_dt[Type == "Adult" | Type =="Snag"]
 
 #this does the state change from adult to snag
 sl_out_as[, state_change := Type != data.table::shift(Type, type = "lag", 
                                                      fill = NA), by = "UniqXY"]
-sl_out_as[, state_type := ifelse(Type == "Adult","Adult",
-                            ifelse(Type == "Snag" & `Dead Code` =="Alive" & #not sure why dead code is diff
-                                         state_change == TRUE, "SnagCreate",
-                             ifelse(Type == "Snag" & `Dead Code` =="Alive", "Snag",
-                              ifelse(Type=="Snag" & `Dead Code` == "Natural", "SnFallNext",
-                               ifelse(Type == "Snag" & `Dead Code` == "Harvest",
-                                                            "SnagHarvest", NA)))))]
+
+#if using output processed via SORTIE GUI:
+if(output_GUI){
+  #then there are codes of "alive" and natural applied - 
+  #I still don't know how codes of snag harvest would be coded
+  sl_out_as[, state_type := ifelse(Type == "Adult","Adult",
+                              ifelse(Type == "Snag" & `Dead Code` =="Alive" & #not sure why dead code is diff
+                                      state_change == TRUE, "SnagCreate",
+                                ifelse(Type == "Snag" & `Dead Code` =="Alive", "Snag",
+                                 ifelse(Type=="Snag" & `Dead Code` == "Natural", "SnFallNext",
+                                  ifelse(Type == "Snag" & `Dead Code` == "Harvest",
+                                   "SnagHarvest", NA)))))]
+}else{
+  sl_out_as[, state_type := ifelse(Type == "Adult","Adult",
+                              ifelse(Type == "Snag" & !is.na(dead)  &
+                                      state_change == TRUE, "SnagCreate",
+                                ifelse(Type == "Snag" & !is.na(dead), "Snag",
+                                 ifelse(Type=="Snag" & `Dead Code` == "Natural", "SnFallNext",
+                                  ifelse(Type == "Snag" & `Dead Code` == "Harvest",
+                                   "SnagHarvest", NA)))))]
+}
+
+
 #sl_out_as[,unit:=as.numeric(unit)]
 sl_out_as <- merge(sl_out_as, SummitLakeData::Treatments, by ="unit")
 
@@ -79,6 +107,138 @@ for(i in 1:length(fallIDs)){
 
 sl_snag_time <- sl_out_as[UniqXY %in% fallIDs & state_type == "SnFallNext",
                       .(treatment,unit,Species,DBH,UniqXY,TimeAsSnag)]
+
+
+#08-SnagFall.R
+sl_ad_sn_sp
+setnames(sl_ad_sn_sp, c("unit","treatment"),c("Unit","Treatment"))
+sl_ad_sn
+setnames(sl_ad_sn, c("unit","treatment"),c("Unit","Treatment"))
+sl_snag_time
+setnames(sl_snag_time, c("unit","treatment"),c("Unit","Treatment"))
+
+#note - these won't start at time 0 as only years with snags recruited or fall are included
+dc_ad_sn_sp
+dc_ad_sn
+
+
+# stats:
+library(betareg)
+library(lmtest)
+sl_ad_sn_sp[, .(mean(SnagRecrRate), mean(SnagFallRate)), by = "Treatment"]
+
+mod1 <- betareg(SnagRecrRate ~ Treatment + timestep, data = sl_ad_sn)
+null_mod <- betareg(SnagRecrRate ~ 1, data = sl_ad_sn)
+lr_test <- lrtest(null_mod, mod1)
+summary(mod1)
+
+summary(betareg(SnagFallRate ~ Treatment * timestep, data = sl_ad_sn_sp))
+
+
+# Figures:
+ggplot(dc_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = as.character(Unit)),size=4)+
+  geom_line(aes(x = timestep, y = SnagRecrRate, colour = as.character(Unit)),size=1.5)+
+  theme_minimal()+
+  ylab("Snag Recruitment (adults - snags) Rate (%)")
+ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagRecruitRate_newCM.jpg")
+
+ggplot()+
+  #geom_point(aes(x = timestep, y = SnagRecrRate, colour = as.character(Unit)),size=2, data = dc_ad_sn)+
+  #geom_line(aes(x = timestep, y = SnagRecrRate, colour = as.character(Unit)),size=1, data = dc_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = as.character(Treatment)),size=2, data = sl_ad_sn)+
+  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = as.character(Treatment)),size=1, data = sl_ad_sn)+
+  theme_minimal()+
+  ylab("Snag Recruitment (adults - snags) Rate (%)")
+
+
+ggplot(NH_ad_sn_sp)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Species),size=4)+
+  #geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = Species))+
+  geom_line(aes(x = timestep, y = SnagRecrRate, colour = Species),size=0.5)+
+  scale_colour_manual(values = brewer.pal(9, "Set3"))+
+  theme_minimal()+
+  ylab("Snag Recruitment (adults - snags) Rate (%)")+
+  facet_wrap("Unit")
+
+
+ggplot(dc_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Treatment),size=4)+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
+  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = Treatment),size=1.5,
+              method = "lm")+
+  theme_minimal()+
+  ylab("Snag Recruitment (adults - snags) Rate (%)")
+
+#which trees are dying
+ggplot(dc_ad_sn_sp)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Treatment))+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
+  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = Treatment),
+              method = "lm")+
+  theme_minimal()+
+  facet_wrap("Species")+
+  ylab("Snag Recruitment (adults - snags) Rate (%)")
+
+
+ggplot(dc_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=4)+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
+  geom_smooth(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5,
+              method = "lm")+
+  theme_minimal()+
+  ylab("Snag Fall Rate (snags - snag fall) (%)")
+#ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagFallRate_newSnagDyn.jpg")
+
+ggplot(sl_ad_sn[timestep<30])+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=4)+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
+  geom_smooth(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5,
+              method = "lm")+
+  theme_minimal()+
+  ylab("Snag Fall Rate (snags - snag fall) (%)")
+
+ggplot(sl_ad_sn_sp)+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = Species),size=4)+
+  #geom_smooth(aes(x = timestep, y = SnagFallRate))+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Species),size=0.5)+
+  scale_colour_manual(values = RColorBrewer::brewer.pal(4, "Set3"))+
+  theme_minimal()+
+  ylab("Snag Fall Rate (snags - snag fall) Rate (%)")+
+  facet_wrap("Treatment")
+
+ggplot()+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=2, data = dc_ad_sn)+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=1, data = dc_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=2, data = sl_ad_sn)+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=1, data = sl_ad_sn)+
+  geom_smooth(aes(x = timestep, y = SnagFallRate),size=2, colour = "red", data = dc_ad_sn)+
+  geom_smooth(aes(x = timestep, y = SnagFallRate),size=2, colour = "blue", data = sl_ad_sn)+
+  theme_minimal()+
+  ylab("Snag Fall Rate (snags - snag fall) Rate (%)")
+
+
+ggplot(sl_snag_time)+
+  geom_boxplot(aes(y = Unit, x = TimeAsSnag, fill = Unit))+
+  theme_minimal()+
+  ylab("Number of years standing as snag")+
+  facet_wrap("Species")
+ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagLongevity.jpg")
+
+ggplot(sl_snag_time)+
+  geom_boxplot(aes(y = as.character(Species), x = TimeAsSnag, fill =Species))+
+  theme_minimal()+
+  ylab("Number of years standing as snag")
+facet_wrap("Species")
+ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagLongevity.jpg")
+
+
+#from SORTIE parameters: 
+# tree fall probability (never becomes a snag)
+
+
+#Check against the snag run:
+unique(NH_tr[Type=="Adult"]$Dead.Code) # no adults were assigned a dead code of natural (or harvest)
 
 #----------------------------------------------------------------------------------
 #ICH---------------------------------------------------------------------------

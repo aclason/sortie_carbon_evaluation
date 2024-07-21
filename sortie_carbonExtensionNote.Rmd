@@ -32,67 +32,32 @@ rm(ls, new.packages)
 
 3. Downed wood Figures
 ```{r}
-#SBS
-MS_cwd_sl
-FS_cwd_sl
 
-ggplot(MS_cwd_sl, aes(x=timestep, y = MgHa, group=unit, colour = treatment))+
-  geom_line(linewidth=1)+
-  stat_summary(geom = "ribbon", fun.min = min, fun.max = max, alpha = 0.1) +
-  #stat_summary(geom = "line", fun = mean)
-  theme_minimal()
-ggsave(filename = "DecayRates_SBS.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
+bias(FS_cwd_sl[timestep==28 & Unit!= 4 & Unit != 15]$MgHa, MS_cwd_sl[timestep==27]$MgHa, 
+     n = 17)
+#positive value - actual is higher than predicted
 
-#Volume  
-ggplot(NULL)+
-  geom_jitter(data = FS_cwd_sl, aes(x= timestep, y = VolHa, colour = treatment))+
-  geom_line(data = MS_cwd_sl, aes(x=timestep, y = VolHa, 
-                                  group = unit, colour = treatment), linetype = 1)
-  #geom_point(data = FS_cwd_dc, aes(x= Yrs_Post, y = VolHa, colour = Treatment))
-  
-geom_jitter(data = FS_cwd_sl_s, aes(x=timestep, y = VolHa, colour = treatment),
-              size = 1, shape = 2)
+rmse(#FS_cwd_sl[timestep==29]$MgHa, MS_cwd_sl[timestep==29]$MgHa, 
+  FS_cwd_sl[timestep==28 & Unit!= 4 & Unit != 15]$MgHa, MS_cwd_sl[timestep==27]$MgHa,
+  n = 17)
+#positive value - actual is 8.2MgHa higher than predicted
 
-#Carbon 
-ggplot(NULL)+
-  geom_jitter(data = FS_cwd_sl, aes(x= timestep, y = MgHa, colour = treatment))+
-  geom_line(data = MS_cwd_sl, aes(x=timestep, y = MgHa, 
-                                  group = unit, colour = treatment), linetype = 1)#
-  #geom_point(data = FS_cwd_dc, aes(x= Yrs_Post, y = MgHa, colour = Treatment))
+cohen_d(FS_cwd_sl[timestep==28 & Unit!= 4 & Unit != 15]$MgHa, MS_cwd_sl[timestep==27]$MgHa)
+#effect size - 
 
 
-  geom_jitter(data = FS_cwd_sl_s, aes(x=timestep, y = MgHa, colour = treatment),
-              size = 1, shape = 2)
+equi_result(FS_cwd_sl[timestep==29]$MgHa, MS_cwd_sl[timestep==29]$MgHa,
+            eq_margin = 0.5)
+#not rejected == they are not different
+equi_result(FS_cwd_sl[timestep==28 & Unit!= 4 & Unit != 15]$MgHa, MS_cwd_sl[timestep==27]$MgHa,
+            eq_margin = 0.5)
+
+equi_boot(actual = FS_cwd_sl[timestep==28 & Unit!= 4 & Unit != 15]$MgHa, 
+          predicted = MS_cwd_sl[timestep==27]$MgHa,
+          n_bootstraps = 1000,
+          eq_margin = 0.5)
 
 
-MS_cwd_sl <- cwdc_sm[,.(MgHa = mean(MgHa),
-                        VolHa = mean(values)), by = c("treatment","unit","timestep","DecayClass")]
-
-ggplot(MS_cwd_sl)+
-  geom_line(aes(x=timestep, y = MgHa, group=unit, colour = treatment))+
-  facet_wrap(~as.factor(DecayClass))
-ggsave(filename = "DecayRates_SBS.jpg",path = "./Outputs/Figures/", device='jpeg', dpi=1000, bg="white")
-
-#ICH -------------------------------------------------------------------------------
-# Modelled:
-#By pixel id - summ all the decay class volumes and carbon together
-M_cwd_dc <- cwdc_dc[,.(pixMgHa = sum(MgHa), pixVolHa = sum(values)),
-                       by = c("Treatment","Unit","timestep","ID")]
-#Add then take the average value across the whole unit
-MS_cwd_dc <- M_cwd_dc[,.(MgHa = mean(pixMgHa), VolHa = mean(pixVolHa)),
-                       by = c("Treatment","Unit","timestep")]
-
-
-#MS_cwd_dc[, Yrs_Post:= as.numeric(timestep)]
-setnames(MS_cwd_dc, "timestep", "Yrs_Post")
-
-ggplot(MS_cwd_dc)+
-  geom_line(aes(x=Yrs_Post, y = MgHa, group = Unit, colour = Treatment))
-
-
-
-#MS_cwd_dc <- cwdc_dc[,.(MgHa = mean(MgHa), VolHa = mean(values)),
- #                      by = c("Treatment","Unit","timestep","DecayClass")]
 
 ```
 
@@ -101,136 +66,6 @@ ggplot(MS_cwd_dc)+
 
 very few snags are recruiting (<1% across treatments)
 ```{r}
-#08-SnagFall.R
-sl_ad_sn_sp
-setnames(sl_ad_sn_sp, c("unit","treatment"),c("Unit","Treatment"))
-sl_ad_sn
-setnames(sl_ad_sn, c("unit","treatment"),c("Unit","Treatment"))
-sl_snag_time
-setnames(sl_snag_time, c("unit","treatment"),c("Unit","Treatment"))
-
-#note - these won't start at time 0 as only years with snags recruited or fall are included
-dc_ad_sn_sp
-dc_ad_sn
-
-
-# stats:
-library(betareg)
-library(lmtest)
-sl_ad_sn_sp[, .(mean(SnagRecrRate), mean(SnagFallRate)), by = "Treatment"]
-
-mod1 <- betareg(SnagRecrRate ~ Treatment + timestep, data = sl_ad_sn)
-null_mod <- betareg(SnagRecrRate ~ 1, data = sl_ad_sn)
-lr_test <- lrtest(null_mod, mod1)
-summary(mod1)
-
-summary(betareg(SnagFallRate ~ Treatment * timestep, data = sl_ad_sn_sp))
-
-
-# Figures:
-ggplot(dc_ad_sn)+
-  geom_point(aes(x = timestep, y = SnagRecrRate, colour = as.character(Unit)),size=4)+
-  geom_line(aes(x = timestep, y = SnagRecrRate, colour = as.character(Unit)),size=1.5)+
-  theme_minimal()+
-  ylab("Snag Recruitment (adults - snags) Rate (%)")
-ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagRecruitRate_newCM.jpg")
-
-ggplot()+
-  #geom_point(aes(x = timestep, y = SnagRecrRate, colour = as.character(Unit)),size=2, data = dc_ad_sn)+
-  #geom_line(aes(x = timestep, y = SnagRecrRate, colour = as.character(Unit)),size=1, data = dc_ad_sn)+
-  geom_point(aes(x = timestep, y = SnagRecrRate, colour = as.character(Treatment)),size=2, data = sl_ad_sn)+
-  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = as.character(Treatment)),size=1, data = sl_ad_sn)+
-  theme_minimal()+
-  ylab("Snag Recruitment (adults - snags) Rate (%)")
-
-
-ggplot(NH_ad_sn_sp)+
-  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Species),size=4)+
-  #geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = Species))+
-  geom_line(aes(x = timestep, y = SnagRecrRate, colour = Species),size=0.5)+
-  scale_colour_manual(values = brewer.pal(9, "Set3"))+
-  theme_minimal()+
-  ylab("Snag Recruitment (adults - snags) Rate (%)")+
-  facet_wrap("Unit")
-
-
-ggplot(dc_ad_sn)+
-  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Treatment),size=4)+
-  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
-  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = Treatment),size=1.5,
-              method = "lm")+
-  theme_minimal()+
-  ylab("Snag Recruitment (adults - snags) Rate (%)")
-
-#which trees are dying
-ggplot(dc_ad_sn_sp)+
-  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Treatment))+
-  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
-  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = Treatment),
-              method = "lm")+
-  theme_minimal()+
-  facet_wrap("Species")+
-  ylab("Snag Recruitment (adults - snags) Rate (%)")
-
-
-ggplot(dc_ad_sn)+
-  geom_point(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=4)+
-  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
-  geom_smooth(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5,
-              method = "lm")+
-  theme_minimal()+
-  ylab("Snag Fall Rate (snags - snag fall) (%)")
-#ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagFallRate_newSnagDyn.jpg")
-
-ggplot(sl_ad_sn[timestep<30])+
-  geom_point(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=4)+
-  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
-  geom_smooth(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5,
-              method = "lm")+
-  theme_minimal()+
-  ylab("Snag Fall Rate (snags - snag fall) (%)")
-
-ggplot(sl_ad_sn_sp)+
-  geom_point(aes(x = timestep, y = SnagFallRate, colour = Species),size=4)+
-  #geom_smooth(aes(x = timestep, y = SnagFallRate))+
-  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Species),size=0.5)+
-  scale_colour_manual(values = RColorBrewer::brewer.pal(4, "Set3"))+
-  theme_minimal()+
-  ylab("Snag Fall Rate (snags - snag fall) Rate (%)")+
-  facet_wrap("Treatment")
-
-ggplot()+
-  geom_point(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=2, data = dc_ad_sn)+
-  #geom_line(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=1, data = dc_ad_sn)+
-  geom_point(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=2, data = sl_ad_sn)+
-  #geom_line(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=1, data = sl_ad_sn)+
-  geom_smooth(aes(x = timestep, y = SnagFallRate),size=2, colour = "red", data = dc_ad_sn)+
-  geom_smooth(aes(x = timestep, y = SnagFallRate),size=2, colour = "blue", data = sl_ad_sn)+
-  theme_minimal()+
-  ylab("Snag Fall Rate (snags - snag fall) Rate (%)")
-
-
-ggplot(sl_snag_time)+
-  geom_boxplot(aes(y = Unit, x = TimeAsSnag, fill = Unit))+
-  theme_minimal()+
-  ylab("Number of years standing as snag")+
-  facet_wrap("Species")
-ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagLongevity.jpg")
-
-ggplot(sl_snag_time)+
-  geom_boxplot(aes(y = as.character(Species), x = TimeAsSnag, fill =Species))+
-  theme_minimal()+
-  ylab("Number of years standing as snag")
-  facet_wrap("Species")
-ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagLongevity.jpg")
-
-
-#from SORTIE parameters: 
-# tree fall probability (never becomes a snag)
-
-
-#Check against the snag run:
-unique(NH_tr[Type=="Adult"]$Dead.Code) # no adults were assigned a dead code of natural (or harvest)
 
 ```
 
@@ -721,6 +556,7 @@ SL_field_D_C <- read.csv("./Inputs/Data/SummitLake_C_field_D.csv") # D = dead
 
 #LIVE
 SL_L_C <- read.csv("./Inputs/Data/SummitLake_C_0506_L.csv")
+SL_L_C <- read.csv("D:/Sync/BVRC/FSD program/FCI/Partial cutting/Manuscript/Extension Note/SORTIE Carbon Extension Note/Files/Outputs/csv/SummitLake_C_0506_L.csv")
 # This data frame will be used below to calculate carbon per species
 
 SL_L_C_u <- SL_L_C %>% # u = unit (this data frame is summarized to the unit level)

@@ -1,5 +1,21 @@
 
+Typical_SS <- data.table(SS=c(10, 9, 7, 5, 6, 1, 3, 2, 4),
+                         SMR=c(6, 5.5, 5.5, 4.5, 4.5, 4, 4, 2, 3.5),
+                         SNR=c(3.5, 4.8, 2, 4.8, 4.8, 3.6, 2, 2.33, 3.5))
+
 #Functions to support analysis
+
+#install.packages("extrafont")
+#extrafont::font_import()
+library(extrafont)
+theme_set(theme_minimal(base_family = "Lucida Console") +  # Change "Arial" to your desired font
+  theme(
+    text = element_text(family = "Lucida Console"),  # Change "Arial" to your desired font
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 12),
+    axis.text = element_text(size = 10)
+  ))
+
 
 
 ###### Functions #####################################################
@@ -91,9 +107,30 @@ select_sp <- function(sp, data) {
   list(obs = obs, pred = pred, n_value = n_value)
 }
 
+select_ts <- function(ts, data) {
+  obs <- data[treatment == ts]$MgHa_obs
+  pred <- data[treatment == ts]$MgHa_pred
+  n_value <- nrow(data[treatment == ts])
+  list(obs = obs, pred = pred, n_value = n_value)
+}
+
+select_all <- function(ts, sp, data) {
+  if (year == "All Years") {
+    obs <- data$MgHa_obs
+    pred <- data$MgHa_pred
+    n_value <- nrow(data)
+  } else {
+    dt <- data
+    obs <- dt[Year == year]$MgHa_obs
+    pred <- dt[Year == year]$MgHa_pred
+    n_value <- nrow(dt[Year == year])
+  }
+  list(obs = obs, pred = pred, n_value = n_value)
+}
+
 stat_functions <- list(
-  Bias = function(data) bias1(data$obs, data$pred),
-  RMSE = function(data) rmse1(data$obs, data$pred),
+  Bias = function(data) bias(data$obs, data$pred),
+  RMSE = function(data) rmse(data$obs, data$pred),
   R_squared = function(data) rsquared(data$obs, data$pred),
   cohenD = function(data) cohen_d(data$obs, data$pred)
   #equi <- function(data) equi_result(data$obs, data$pred, eq_margin = 0.5)

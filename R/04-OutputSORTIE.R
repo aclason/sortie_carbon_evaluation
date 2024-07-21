@@ -4,19 +4,19 @@ library(doParallel)
 ######################### PROCESS SORTIE OUTPUTS ################################
 #SBS---------------------------------------------------------------------------
 in_dir <- file.path("03_out_sortie", "02_summit_lake")
-plots_path <- file.path(in_dir,"ParameterValues") 
+plots_path <- file.path("02_init_sortie", "02_summit_lake","ParameterValues") 
 
 #plots
 plots <- list.files(plots_path, pattern = "summit")
 
-out_path <- file.path(base_dir, "./Inputs/SORTIEruns/SummitLake/Outputs/")
-paramFiles_run <- file.path(base_dir, "./Inputs/SORTIEruns/SummitLake/ParameterValues/")
+#out_path <- file.path(base_dir, "./Inputs/SORTIEruns/SummitLake/Outputs/")
+#paramFiles_run <- file.path(base_dir, "./Inputs/SORTIEruns/SummitLake/ParameterValues/")
 
 plot_root <- stringr::str_split(plots,".csv",
                             simplify = TRUE)[,1]
 
 
-files_2_ext <- list.files(in_dir, pattern = "ds_det", full.names = FALSE)
+files_2_ext <- list.files(in_dir, pattern = "ds-nci_si_6_det", full.names = FALSE)
 
 if(!dir.exists(file.path(in_dir,"extracted"))){
   dir.create(file.path(in_dir,"extracted"))
@@ -25,7 +25,7 @@ if(!dir.exists(file.path(in_dir,"extracted"))){
 extractFiles(itype = 1, exname = paste0(in_dir,"/"), tarnames = files_2_ext)
 
 extFileDir <- file.path(in_dir,"extracted")
-treat_acronym <- "ds"
+treat_acronym <- "ds-nci_si_6"
 treat_parse <- paste0(extFileDir,"/",grep("[[:digit:]].xml$",
                                       grep(treat_acronym,list.files(extFileDir),
                                            value=TRUE),value = TRUE))
@@ -34,7 +34,7 @@ numcores <- 19
 parse_grids <- 1
 parse_trees <- 1
 # which years to parse
-yrs <- seq(0,30) #years vary by plot
+yrs <- seq(0,100) #years vary by plot
 
 t_p <- grep(paste(paste0("_",yrs,".xml"),collapse = "|"),treat_parse, value = TRUE)
 
@@ -98,11 +98,27 @@ parallel::stopCluster(cl)
 
 #----------------------------------------------------------------------------------
 #ICH---------------------------------------------------------------------------
+#using extract outputs from GUI:
+#5. Extract output -------------------------------------------------------------------
+#subplot extract from SORTIE batch extract files
+Outputs_path <- "D:/Github/SORTIEparams/Outputs/ICH/CompMort/extracted/"
+Outputs_ending <- "_-ah"
+years_to_extract <- seq(0,30)
+Units_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/UnitBoundaries/"
+Gaps_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/GapCutsDateCreek/"
+
+# 7 Subplot outputs --------------
+DateCreekData::subplot_outputs(out_path = Outputs_path, run_name = Outputs_ending, 
+                               Units_path = Units_path, yrs = years_to_extract,
+                               dist_edge = 50, size_subplot = 17.84, plotting = FALSE)
+#--------------------------------------------------------------------------------------
+
+#get the grids:
 out_path <- "../SORTIEparams/Outputs/ICH/CompMort/" 
 paramFiles_run <- "../SORTIEparams/Inputs/ICH/CompMort/ParameterValues/"
 plots <- DateCreekData::Treatments$Unit
 
-files_2_ext <- grep("-cm",list.files(out_path, pattern = "det.gz.tar", 
+files_2_ext <- grep("-ah",list.files(out_path, pattern = "det.gz.tar", 
                                      full.names = FALSE), value = TRUE)
 
 if(!dir.exists(paste0(out_path,"extracted/"))){
@@ -112,7 +128,7 @@ if(!dir.exists(paste0(out_path,"extracted/"))){
 extractFiles(itype = 1, exname = out_path, tarnames = files_2_ext)
 
 extFileDir <- paste0(out_path,"extracted/")
-treat_acronym <- "-cm"
+treat_acronym <- "-ah"
 treat_parse <- paste0(extFileDir,grep("[[:digit:]].xml$",
                                       grep(treat_acronym,list.files(extFileDir),
                                            value=TRUE),value = TRUE))

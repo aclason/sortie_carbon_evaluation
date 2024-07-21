@@ -1,6 +1,7 @@
 library(data.table)
 library(SummitLakeData)
 library(DateCreekData)
+library(treeCalcs) #make treeCalcs dependence in sortieCarbon
 
 in_path <- file.path("03_out_sortie")
 out_path <- file.path("04_out_carbon")
@@ -13,7 +14,7 @@ out_path <- file.path("04_out_carbon")
 My_newvalsPath <- file.path("02_init_sortie","02_summit_lake","ParameterValues")
 sum_in_path <- file.path(in_path, "02_summit_lake","extracted")
 
-run_name <- "ds-"
+run_name <- "ds-nci_si_6"
 outfiles <- grep(run_name, list.files(sum_in_path, pattern = ".csv", 
                                       full.names = TRUE), value = TRUE)
 plots <- stringr::str_split(list.files(My_newvalsPath, pattern = "summit"),".csv",
@@ -30,22 +31,28 @@ tree_dt <- tree_dt[X >50 & X <150 & Y >50 & Y <150]
 
 ## Carbon
 #use allometry to calculate height (From treeCalcs package)
-M_trees_sl <- sortieCarbon::calcSortieC(sortie_outputs = tree_dt, dead = TRUE, BEC = "SBS",
+M_trees_sl <- treeCalcs::sortie_tree_carbon(sortie_outputs = tree_dt, dead = TRUE, BEC = "SBS",
                          Ht_from_diam = TRUE)
-M_trees_sl[, unit := as.numeric(tstrsplit(Unit, "t", fixed = TRUE)[[2]])][,Unit:=NULL]
-M_trees_sl[, Year := 1992 + timestep]
+M_trees_sl[, unit := as.numeric(tstrsplit(Unit, "t_", fixed = TRUE)[[2]])][,Unit:=NULL]
+M_trees_sl[, Year := ifelse(unit == 4, 1994 + timestep,
+                        ifelse(unit == 15, 1994 + timestep,
+                               1992 + timestep))]
 
 
 # by unit -------------------
 # Live -----
-MSL_trees_sl <- M_trees_sl[Type == "Adult" & DBH >=7.5,
-                           .(MgUnit = sum(Mg_treeC)), by = .(unit, Year)]
+#MSL_trees_sl <- M_trees_sl[Type == "Adult" & DBH >=7.5,
+ #                          .(MgUnit = sum(Mg_treeC)), by = .(unit, Year)]
+MSL_trees_l <- M_trees_sl[Type != "Snag"]
+MSL_trees_sl <- MSL_trees_l[,.(MgUnit = sum(na.omit(Mg_treeC))), by = .(unit, Year)]
 MSL_trees_sl <- merge(SummitLakeData::Treatments, MSL_trees_sl, by = "unit", all = TRUE)
 MSL_trees_sl[, State := "Live"]
 
 # Dead -----
-MSD_trees_sl <- M_trees_sl[Type == "Snag" & DBH >=7.5,
-                           .(MgUnit = sum(Mg_treeC)), by = .(unit, Year)]
+#MSD_trees_sl <- M_trees_sl[Type == "Snag" & DBH >=7.5,
+ #                          .(MgUnit = sum(Mg_treeC)), by = .(unit, Year)]
+MSD_trees_d <- M_trees_sl[Type == "Snag"]
+MSD_trees_sl <- MSD_trees_d[,.(MgUnit = sum(na.omit(Mg_treeC))), by = .(unit, Year)]
 MSD_trees_sl <- merge(SummitLakeData::Treatments, MSD_trees_sl, by = "unit", all = TRUE)
 MSD_trees_sl[, State := "Dead"]
 
@@ -56,14 +63,16 @@ saveRDS(MSD_trees_sl, file.path(out_path,"MSD_trees_sl.RDS"))
 
 #by species ------------------
 # Live -----
-MSL_trees_sl_sp <- M_trees_sl[Type == "Adult" & DBH >=7.5,
-                              .(MgUnit = sum(Mg_treeC)), by = .(unit, Year, Species)]
+#MSL_trees_sl_sp <- M_trees_sl[Type == "Adult" & DBH >=7.5,
+ #                             .(MgUnit = sum(Mg_treeC)), by = .(unit, Year, Species)]
+MSL_trees_sl_sp <- MSL_trees_l[,.(MgUnit = sum(na.omit(Mg_treeC))), by = .(unit, Year, Species)]
 MSL_trees_sl_sp <- merge(SummitLakeData::Treatments, MSL_trees_sl_sp, by = c("unit"), all = TRUE)
 MSL_trees_sl_sp[, State := "Live"]
 
 # Dead -----
-MSD_trees_sl_sp <- M_trees_sl[Type == "Snag" & DBH >=7.5,
-                              .(MgUnit = sum(Mg_treeC)), by = .(unit, Year, Species)]
+#MSD_trees_sl_sp <- M_trees_sl[Type == "Snag" & DBH >=7.5,
+ #                             .(MgUnit = sum(Mg_treeC)), by = .(unit, Year, Species)]
+MSD_trees_sl_sp <- MSD_trees_d[,.(MgUnit = sum(na.omit(Mg_treeC))), by = .(unit, Year, Species)]
 MSD_trees_sl_sp <- merge(SummitLakeData::Treatments, MSD_trees_sl_sp, by = c("unit"), all = TRUE)
 MSD_trees_sl_sp[, State := "Dead"]
 
@@ -75,7 +84,7 @@ saveRDS(MSD_trees_sl_sp, file.path(out_path,"MSD_trees_sl_sp.RDS"))
 ### Field ----------------------------------------------------------
 # using dima-height relationship - same as Date Creek
 F_trees_sl <- SummitLakeData::clean_trees(raw_data = 
-                                            "C:/Github/SummitLakeData/data-raw/SummitLakeData.csv")
+                                            "D:/Github/SummitLakeData/data-raw/SummitLakeData.csv")
 
 #get the treatments & remove the unit/year combos that were not sampled:
 treats <- SummitLakeData::Treatments[, .(Year = rep(sort(unique(F_trees_sl$Year)), 
@@ -89,7 +98,7 @@ treats_surveyed <- merge(treats, remeas_freq_m[!is.na(value)], by = c("unit","Ye
 treats_surveyed[,value:=NULL]
 
 #only use trees > 7.5cm dbh (moved to 7.5 cutoff in 2009)
-F_trees_sl <- F_trees_sl[DBH >= 7.5]
+#F_trees_sl <- F_trees_sl[DBH >= 7.5]
 
 # by unit -------------------
 #each plot was 0.05ha in size (12.6m radius)
@@ -129,9 +138,19 @@ saveRDS(FSD_trees_sl_sp, file.path(out_path,"FSD_trees_sl_sp.RDS"))
 #snag fall?
 
 #ICH--------------------------------------------------------------------------------------------
+dc_in_path <- file.path(in_path, "02_summit_lake","extracted")
+out_path <- "../SORTIEparams/Outputs/ICH/CompMort/extracted" 
 
+run_name <- "ah"
+outfiles <- grep(run_name, list.files(out_path, pattern = ".csv", 
+                                      full.names = TRUE), value = TRUE)
 
+grid_files <- grep("grids",outfiles, value = TRUE)
+grid_dt <- rbindlist(lapply(grid_files, fread))
+grid_to_output <- grep("GLI",unique(grid_dt$mapnm), value = TRUE)
+glis <- grid_dt[mapnm %in% grid_to_output]
 
+fwrite(glis, paste0(out_path,"/glis.csv"))
 
 ### Field -------------------
 
