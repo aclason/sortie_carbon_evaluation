@@ -8,12 +8,13 @@ Typical_SS <- data.table(SS=c(10, 9, 7, 5, 6, 1, 3, 2, 4),
 #install.packages("extrafont")
 #extrafont::font_import()
 library(extrafont)
-theme_set(theme_minimal(base_family = "Lucida Console") +  # Change "Arial" to your desired font
+theme_set(theme_minimal(base_family = "Arial") +  # Change "Arial" to your desired font
   theme(
-    text = element_text(family = "Lucida Console"),  # Change "Arial" to your desired font
+    text = element_text(family = "Arial"),  # Change "Arial" to your desired font
     plot.title = element_text(size = 14, face = "bold"),
-    axis.title = element_text(size = 12),
-    axis.text = element_text(size = 10)
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12, face = "bold"),
+    legend.text = element_text(size = 12, face = "bold")
   ))
 
 
