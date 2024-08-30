@@ -1,7 +1,7 @@
 library(data.table)
 library(SummitLakeData)
 library(DateCreekData)
-library(treeCalcs) #make treeCalcs dependence in sortieCarbon
+library(treeCalcs) 
 
 in_path <- file.path("03_out_sortie")
 out_path <- file.path("04_out_carbon")
@@ -14,7 +14,7 @@ out_path <- file.path("04_out_carbon")
 My_newvalsPath <- file.path("02_init_sortie","02_summit_lake","ParameterValues")
 sum_in_path <- file.path(in_path, "02_summit_lake","extracted")
 
-run_name <- "ds-nci_si_6"
+run_name <- "ds-nci_si-"
 outfiles <- grep(run_name, list.files(sum_in_path, pattern = ".csv", 
                                       full.names = TRUE), value = TRUE)
 plots <- stringr::str_split(list.files(My_newvalsPath, pattern = "summit"),".csv",
@@ -38,23 +38,73 @@ M_trees_sl[, Year := ifelse(unit == 4, 1994 + timestep,
                         ifelse(unit == 15, 1994 + timestep,
                                1992 + timestep))]
 
+################## just do this if looking at SPH #################
+#leave it as individuals (for SPH calcs):
+minDBH <- round(min(M_trees_sl$DBH, na.rm = TRUE),0)
+maxDBH <- round(max(M_trees_sl$DBH, na.rm = TRUE),0)
+# Create a vector of DBH size classes, by 2 cm increments
+diam_classes <- seq(minDBH,(maxDBH + 2),
+                    by = 2)
+for(j in 1:length(diam_classes)){
+  M_trees_sl[DBH <= diam_classes[j] & DBH > diam_classes[j] - 2,
+         DBH_bin := diam_classes[j]]
+}
 
+M_trees_sl_sph <- M_trees_sl[, .(SPH = .N), by = .(unit, Year, Type, tree_species, DBH_bin)]
+
+M_trees_sl_sph_sdl <- M_trees_sl_sph[Type == "Seedling"]
+M_trees_sl_sph_sap <- M_trees_sl_sph[Type == "Sapling"]
+M_trees_sl_sph <- M_trees_sl_sph[Type != "Seedling" & Type != "Sapling"]
+
+#add all zeros:
+all_poss <- CJ(unique(M_trees_sl_sph$unit), unique(M_trees_sl_sph$tree_species), 
+               unique(M_trees_sl_sph$Year),
+               unique(M_trees_sl_sph$Type), unique(M_trees_sl_sph$DBH_bin))
+setnames(all_poss,c("V1","V2","V3","V4","V5"),
+         c("unit","tree_species","Year","Type","DBH_bin"))
+
+M_trees_sl_sph_a <- merge(M_trees_sl_sph, all_poss,
+                 by = c("unit","tree_species","Year","Type","DBH_bin"),
+                 all = T)
+M_trees_sl_sph_a[is.na(SPH), SPH := 0]
+M_trees_sl_sph_a <- M_trees_sl_sph_a[Year == 1992 |
+                                       Year == 1994 |
+                                       Year == 1997 |
+                                       Year == 2009 |
+                                       Year == 2018]
+
+ggplot(data = M_trees_sl_sph_a[unit == 12 & Type == "Adult"])+
+  geom_col(aes(x = DBH_bin, y = SPH, fill = tree_species))+
+  facet_wrap(~Year)+
+  theme(legend.position = "bottom")
+
+ggplot(data = M_trees_sl_sph_a[unit == 3 & Type == "Snag"])+
+  geom_col(aes(x = DBH_bin, y = SPH, fill = tree_species))+
+  facet_wrap(~Year)+
+  theme(legend.position = "bottom")
+
+ggplot(data = M_trees_sl_sph_a[Type == "Adult"])+
+  geom_col(aes(x = DBH_bin, y = SPH, fill = tree_species))+
+  facet_grid(c("unit","Year"))+
+  theme(legend.position = "bottom")
+####################################################################
 # by unit -------------------
 # Live -----
 #MSL_trees_sl <- M_trees_sl[Type == "Adult" & DBH >=7.5,
  #                          .(MgUnit = sum(Mg_treeC)), by = .(unit, Year)]
 MSL_trees_l <- M_trees_sl[Type != "Snag"]
-MSL_trees_sl <- MSL_trees_l[,.(MgUnit = sum(na.omit(Mg_treeC))), by = .(unit, Year)]
+MSL_trees_sl <- MSL_trees_l[,.(MgHa = sum(na.omit(Mg_treeC))), by = .(unit, Year)]
 MSL_trees_sl <- merge(SummitLakeData::Treatments, MSL_trees_sl, by = "unit", all = TRUE)
 MSL_trees_sl[, State := "Live"]
-
+setnames(MSL_trees_sl, c("unit", "treatment"), c("Unit","Treatment"))
 # Dead -----
 #MSD_trees_sl <- M_trees_sl[Type == "Snag" & DBH >=7.5,
  #                          .(MgUnit = sum(Mg_treeC)), by = .(unit, Year)]
 MSD_trees_d <- M_trees_sl[Type == "Snag"]
-MSD_trees_sl <- MSD_trees_d[,.(MgUnit = sum(na.omit(Mg_treeC))), by = .(unit, Year)]
+MSD_trees_sl <- MSD_trees_d[,.(MgHa = sum(na.omit(Mg_treeC))), by = .(unit, Year)]
 MSD_trees_sl <- merge(SummitLakeData::Treatments, MSD_trees_sl, by = "unit", all = TRUE)
 MSD_trees_sl[, State := "Dead"]
+setnames(MSL_trees_sl, c("unit", "treatment"), c("Unit","Treatment"))
 
 #output -
 saveRDS(MSL_trees_sl, file.path(out_path,"MSL_trees_sl.RDS"))
@@ -65,23 +115,24 @@ saveRDS(MSD_trees_sl, file.path(out_path,"MSD_trees_sl.RDS"))
 # Live -----
 #MSL_trees_sl_sp <- M_trees_sl[Type == "Adult" & DBH >=7.5,
  #                             .(MgUnit = sum(Mg_treeC)), by = .(unit, Year, Species)]
-MSL_trees_sl_sp <- MSL_trees_l[,.(MgUnit = sum(na.omit(Mg_treeC))), by = .(unit, Year, Species)]
+MSL_trees_sl_sp <- MSL_trees_l[,.(MgHa = sum(na.omit(Mg_treeC))), by = .(unit, Year, Species)]
 MSL_trees_sl_sp <- merge(SummitLakeData::Treatments, MSL_trees_sl_sp, by = c("unit"), all = TRUE)
 MSL_trees_sl_sp[, State := "Live"]
-
+setnames(MSL_trees_sl_sp, c("unit", "treatment"), c("Unit","Treatment"))
 # Dead -----
 #MSD_trees_sl_sp <- M_trees_sl[Type == "Snag" & DBH >=7.5,
  #                             .(MgUnit = sum(Mg_treeC)), by = .(unit, Year, Species)]
-MSD_trees_sl_sp <- MSD_trees_d[,.(MgUnit = sum(na.omit(Mg_treeC))), by = .(unit, Year, Species)]
+MSD_trees_sl_sp <- MSD_trees_d[,.(MgHa = sum(na.omit(Mg_treeC))), by = .(unit, Year, Species)]
 MSD_trees_sl_sp <- merge(SummitLakeData::Treatments, MSD_trees_sl_sp, by = c("unit"), all = TRUE)
 MSD_trees_sl_sp[, State := "Dead"]
+setnames(MSD_trees_sl_sp, c("unit", "treatment"), c("Unit","Treatment"))
 
 saveRDS(MSL_trees_sl_sp, file.path(out_path,"MSL_trees_sl_sp.RDS"))
 saveRDS(MSD_trees_sl_sp, file.path(out_path,"MSD_trees_sl_sp.RDS"))
 
 
 
-### Field ----------------------------------------------------------
+### Field -------------------------------------------------------------------------------------
 # using dima-height relationship - same as Date Creek
 F_trees_sl <- SummitLakeData::clean_trees(raw_data = 
                                             "D:/Github/SummitLakeData/data-raw/SummitLakeData.csv")
@@ -104,15 +155,16 @@ treats_surveyed[,value:=NULL]
 #each plot was 0.05ha in size (12.6m radius)
 # Live -----
 FSL_trees_sl <- F_trees_sl[State == "Live" & DeadStatus == "NotDown",
-                           .(MgUnit = sum(Mg_treeC)*20), by = .(unit, Year, State)]
+                           .(MgHa = sum(Mg_treeC)*20), by = .(unit, Year, State)]
 FSL_trees_sl <- merge(treats_surveyed, FSL_trees_sl, by = c("unit","Year"), all = TRUE)
-FSL_trees_sl[is.na(MgUnit), `:=`(MgUnit = 0, State = "Live")]
-
+FSL_trees_sl[is.na(MgHa), `:=`(MgHa = 0, State = "Live")]
+setnames(FSL_trees_sl, c("unit", "treatment"), c("Unit","Treatment"))
 # Dead -----
 FSD_trees_sl <- F_trees_sl[State == "Dead" & DeadStatus == "Dead",
-                           .(MgUnit = sum(Mg_treeC)*20), by = .(unit, Year, State)]
+                           .(MgHa = sum(Mg_treeC)*20), by = .(unit, Year, State)]
 FSD_trees_sl <- merge(treats_surveyed, FSD_trees_sl, by = c("unit","Year"), all = TRUE)
-FSD_trees_sl[is.na(MgUnit), `:=`(MgUnit = 0, State = "Dead")]
+FSD_trees_sl[is.na(MgHa), `:=`(MgHa = 0, State = "Dead")]
+setnames(FSD_trees_sl, c("unit", "treatment"), c("Unit","Treatment"))
 
 saveRDS(FSL_trees_sl, file.path(out_path,"FSL_trees_sl.RDS"))
 saveRDS(FSD_trees_sl, file.path(out_path,"FSD_trees_sl.RDS"))
@@ -120,15 +172,17 @@ saveRDS(FSD_trees_sl, file.path(out_path,"FSD_trees_sl.RDS"))
 #by species ------------------
 # Live -----
 FSL_trees_sl_sp <- F_trees_sl[State == "Live" & DeadStatus == "NotDown",
-                           .(MgUnit = sum(Mg_treeC)*20), by = .(unit, Year, State, Species)]
+                           .(MgHa = sum(Mg_treeC)*20), by = .(unit, Year, State, Species)]
 FSL_trees_sl_sp <- merge(treats_surveyed, FSL_trees_sl_sp, by = c("unit","Year"), all = TRUE)
-FSL_trees_sl_sp[is.na(MgUnit), `:=`(MgUnit = 0, State = "Live")]
+FSL_trees_sl_sp[is.na(MgHa), `:=`(MgHa = 0, State = "Live")]
+setnames(FSL_trees_sl_sp, c("unit", "treatment"), c("Unit","Treatment"))
 
 # Dead -----
 FSD_trees_sl_sp <- F_trees_sl[State == "Dead" & DeadStatus == "Dead",
-                           .(MgUnit = sum(Mg_treeC)*20), by = .(unit, Year, State, Species)]
+                           .(MgHa = sum(Mg_treeC)*20), by = .(unit, Year, State, Species)]
 FSD_trees_sl_sp <- merge(treats_surveyed, FSD_trees_sl_sp, by = c("unit","Year"), all = TRUE)
-FSD_trees_sl_sp[is.na(MgUnit), `:=`(MgUnit = 0, State = "Dead")]
+FSD_trees_sl_sp[is.na(MgHa), `:=`(MgHa = 0, State = "Dead")]
+setnames(FSD_trees_sl_sp, c("unit", "treatment"), c("Unit","Treatment"))
 
 saveRDS(FSL_trees_sl_sp, file.path(out_path,"FSL_trees_sl_sp.RDS"))
 saveRDS(FSD_trees_sl_sp, file.path(out_path,"FSD_trees_sl_sp.RDS"))
@@ -138,31 +192,296 @@ saveRDS(FSD_trees_sl_sp, file.path(out_path,"FSD_trees_sl_sp.RDS"))
 #snag fall?
 
 #ICH--------------------------------------------------------------------------------------------
-dc_in_path <- file.path(in_path, "02_summit_lake","extracted")
-out_path <- "../SORTIEparams/Outputs/ICH/CompMort/extracted" 
+### SORTIE ----------------------------------------------------
+dc_in_path <- file.path(in_path, "01_date_creek","extracted")
 
 run_name <- "ah"
-outfiles <- grep(run_name, list.files(out_path, pattern = ".csv", 
-                                      full.names = TRUE), value = TRUE)
+outfiles <- grep("grids",grep(run_name, list.files(dc_in_path, pattern = ".csv", 
+                                      full.names = TRUE), value = TRUE),
+                 value = TRUE, invert = TRUE)
 
-grid_files <- grep("grids",outfiles, value = TRUE)
-grid_dt <- rbindlist(lapply(grid_files, fread))
-grid_to_output <- grep("GLI",unique(grid_dt$mapnm), value = TRUE)
-glis <- grid_dt[mapnm %in% grid_to_output]
+tree_dt <- rbindlist(lapply(outfiles, fread), fill = TRUE)
 
-fwrite(glis, paste0(out_path,"/glis.csv"))
+#because this comes from the GUI, need to change column names:
+setnames(tree_dt,
+         c("Species"),
+         c("tree_species"))
 
-### Field -------------------
+## Basal area
+#tree_dt[, ':='(BA = treeCalcs::calc_BA(DBH))]
 
-#get plots for each measurement:
-#1992:-------------------------------------------------------
-# Count how many plots there are for each treatment unit
-# so when averaging carbon/unit later, we can take into account the plots that had zero C
-labels1992.cruise <- ddply(dat.1992.cruise[c("Unit", "PlotNum",  "DBH")], .(Unit, PlotNum), numcolwise(length))
-labels1992.cruise$DBH <- NULL # this is really a count of the trees in each plot which we don't need in the labels
-test.labels <- labels1992.cruise
-test.labels$count <- rep(1, length(labels1992.cruise$Unit))
-Plot_in_Units92 <- ddply(test.labels, .(Unit), numcolwise(sum))
+## Carbon
+#use allometry to calculate height (From treeCalcs package)
+M_trees_dc_sa <- tree_dt[Type != "Seedling"]
+M_trees_dc_sa <- treeCalcs::sortie_tree_carbon(sortie_outputs = M_trees_dc_sa, 
+                                            dead = TRUE, 
+                                            BEC = "ICH",
+                                            ht_from_diam = "standard")
+
+M_trees_dc_sa[, Mg_treeC := ifelse(Type == "Seedling",
+                                treeCalcs::calc_sm_tree_c_Ung(Species = Spp,
+                                                              Height_class = "31-130",
+                                                              Diam_est = 1,
+                                                              Health = "L"),
+                                ifelse(is.na(cruise_hgt) | cruise_hgt == 0,
+                                       treeCalcs::calc_tree_c(Species = Spp,
+                                                              DBH = DBH,
+                                                              HT = Height,
+                                                              Tree_class = Tree.Class),
+                                       treeCalcs::calc_tree_c(Species = Spp,
+                                                              DBH = DBH,
+                                                              HT = cruise_hgt, 
+                                                              Tree_class = Tree.Class))),
+           by= seq_len(nrow(F_trees_dc))]
+
+M_trees_dc_sdls <- tree_dt[Type == "Seedling"]
+M_trees_dc_sdls[, Species:= ifelse(tree_species == "Western_redcedar", "Cw",
+                      ifelse(tree_species == "Western_Hemlock", "Hw",
+                        ifelse(tree_species == "Subalpine_Fir", "Bl",
+                          ifelse(tree_species == "Hybrid_spruce","Sx",
+                            ifelse(tree_species == "Interior_Spruce","Sx",
+                              ifelse(tree_species == "Paper_Birch","Ep",
+                                ifelse(tree_species == "Black_Cottonwood","Ac",
+                                  ifelse(tree_species == "Amabalis_Fir","Ba",
+                                   ifelse(tree_species == "Trembling_Aspen","At",
+                                    ifelse(tree_species == "Lodgepole_Pine","Pl",
+                                     ifelse(tree_species == "Douglas_Fir","Fd",
+                                      ifelse(tree_species == "Western_Larch", "Lw",NA))))))))))))]
+M_trees_dc_sdls[, hgt_cl := ifelse(Height <= 30, "0-30",
+                                   "31-130")]
+M_trees_dc_sdls[, dbh_est := ifelse(hgt_cl == "0-30", 0.1, 1)]
+M_trees_dc_sdls[, Kg_treeC := treeCalcs::calc_sm_tree_c_Ung(Species = Species,
+                                                  Height_class = hgt_cl,
+                                                  Diam_est = dbh_est,
+                                                  Health = "L"),
+                by = seq_len(nrow(M_trees_dc_sdls))]
+
+
+
+M_trees_dc[, Year := 1992 + timestep]
+
+#M_trees_dc[, SPH := 10]
+#M_trees_dc[, MgHa := Mg_treeC * SPH]
+
+#do you want all live trees - or just over a certain DBH?
+MSL_trees_dc <- M_trees_dc[Type != "Snag" & !is.na(Mg_treeC)]
+#MSL_trees_dc <- M_trees_dc[Type == "Adult" & DBH >=7.5]
+MSL_trees_dc_a <- MSL_trees_dc[,.(MgUnit = sum(na.omit(Mg_treeC))), 
+                               by = .(Unit, Year, SubPlot)] #sum each subplot
+#MSL_trees_dc_a <- MSL_trees_dc[,.(MgHa_SP = sum(na.omit(MgHa))), 
+ #                              by = .(Unit, Year, SubPlot)] #sum each subplot
+#to do - add in seedling carbon
+MSL_trees_dc_ab <- MSL_trees_dc_a[,.(MgUnit = mean(MgUnit)), 
+                               by = .(Unit, Year)] #average MgUnit across all subplots
+MSL_trees_dc_ab[, MgHa := MgUnit/0.1] #divided by the ha measured in a subplot
+
+MSL_trees_dc <- merge(DateCreekData::Treatments, MSL_trees_dc_ab, 
+                      by = "Unit", all = TRUE)
+MSL_trees_dc[, State := "Live"][,MgUnit := NULL]
+
+# Dead -----
+#MSD_trees_sl <- M_trees_sl[Type == "Snag" & DBH >=7.5,
+#                          .(MgUnit = sum(Mg_treeC)), by = .(unit, Year)]
+MSD_trees_dc <- M_trees_dc[Type == "Snag"]
+#sum each subplot:
+MSD_trees_dc_a <- MSD_trees_dc[,.(MgUnit = sum(na.omit(Mg_treeC))), 
+                               by = .(Unit, Year, SubPlot)]
+#average MgUnit across all subplots
+MSD_trees_dc_ab <- MSD_trees_dc_a[,.(MgUnit = mean(MgUnit)), 
+                                  by = .(Unit, Year)]
+#divided by the ha measured in a subplot
+MSD_trees_dc_ab[, MgHa := MgUnit/0.02]
+
+MSD_trees_dc <- merge(DateCreekData::Treatments, MSL_trees_dc_ab, 
+                      by = "Unit", all = TRUE)
+MSD_trees_dc[, State := "Dead"]
+
+
+#output -
+saveRDS(MSL_trees_dc, file.path(out_path,"MSL_trees_dc.RDS"))
+saveRDS(MSD_trees_dc, file.path(out_path,"MSD_trees_dc.RDS"))
+
+#by species ------------------
+# Live -----
+#MSL_trees_sl_sp <- M_trees_sl[Type == "Adult" & DBH >=7.5,
+#                             .(MgUnit = sum(Mg_treeC)), by = .(unit, Year, Species)]
+#do you want all live trees - or just voer a certain DBH?
+MSL_trees_dc_sp <- M_trees_dc[Type != "Snag" & !is.na(Mg_treeC)]
+#MSL_trees_dc <- M_trees_dc[Type == "Adult" & DBH >=7.5]
+MSL_trees_dc_sp_a <- MSL_trees_dc_sp[,.(MgUnit = sum(na.omit(Mg_treeC))), 
+                                     by = .(Unit, Year, SubPlot, Species)] #sum each subplot
+#instead of adding all the 0s, just add total and divide by number of subplots
+MSL_trees_dc_sp_ab <- MSL_trees_dc_sp_a[,.(MgUnit = sum(MgUnit)), 
+                                  by = .(Unit, Year, Species)] #sum MgUnit across all subplots
+samp_int <- M_trees_dc[,.(SampInt = max(SubPlot)),by = .(Unit, Year)]
+MSL_trees_dc_sp_ab <- merge(MSL_trees_dc_sp_ab, samp_int, by = c("Unit", "Year"))
+MSL_trees_dc_sp_ab[, MgHa := MgUnit/(0.02*SampInt)]
+MSL_trees_dc_sp <- merge(DateCreekData::Treatments, MSL_trees_dc_sp_ab, 
+                            by = c("Unit"), all = TRUE)
+MSL_trees_dc_sp[, State := "Live"]
+
+
+# Dead -----
+#MSD_trees_sl_sp <- M_trees_sl[Type == "Snag" & DBH >=7.5,
+#                             .(MgUnit = sum(Mg_treeC)), by = .(unit, Year, Species)]
+MSD_trees_dc_sp <- M_trees_dc[Type == "Snag"]
+#MSL_trees_dc <- M_trees_dc[Type == "Adult" & DBH >=7.5]
+MSD_trees_dc_sp_a <- MSD_trees_dc_sp[,.(MgUnit = sum(na.omit(Mg_treeC))), 
+                                     by = .(Unit, Year, SubPlot, Species)] #sum each subplot
+#instead of adding all the 0s, just add total and divide by number of subplots
+MSD_trees_dc_sp_ab <- MSD_trees_dc_sp_a[,.(MgUnit = sum(MgUnit)), 
+                                        by = .(Unit, Year, Species)] #sum MgUnit across all subplots
+samp_int <- M_trees_dc[,.(SampInt = max(SubPlot)),by = .(Unit, Year)]
+MSD_trees_dc_sp_ab <- merge(MSD_trees_dc_sp_ab, samp_int, by = c("Unit", "Year"))
+MSD_trees_dc_sp_ab[, MgHa := MgUnit/(0.02*SampInt)]
+MSD_trees_dc_sp <- merge(DateCreekData::Treatments, MSD_trees_dc_sp_ab, 
+                         by = c("Unit"), all = TRUE)
+MSD_trees_dc_sp[, State := "Dead"]
+
+saveRDS(MSL_trees_dc_sp, file.path(out_path,"MSL_trees_dc_sp.RDS"))
+saveRDS(MSD_trees_dc_sp, file.path(out_path,"MSD_trees_dc_sp.RDS"))
+
+
+### Field ------------------------------------------------------------------------
+tree_dt_92 <- DateCreekData::trees_1992(cruise_data = "D:/Github/DateCreekData/data-raw/Trees/1992data.csv",
+                                           fixed_data = "D:/Github/DateCreekData/data-raw/Trees/1992fixed_radius_data_fromTable20_DateCkHandbook.csv",
+                                        calc_height = TRUE) 
+tree_dt_93 <- DateCreekData::trees_1993(data =  "D:/Github/DateCreekData/data-raw/Trees/SS93forR.csv",
+                                        calc_height = TRUE) 
+
+tree_dt_10 <- DateCreekData::trees_2010(lrg_trees = "D:/Github/DateCreekData/data-raw/Trees/Data Creek 2010 Data large trees.csv",
+                                        cc_trees = "D:/Github/DateCreekData/data-raw/Trees/Trees 10cm and above in clearcut 2010.csv",
+                                        small_trees = "D:/Github/DateCreekData/data-raw/Trees/Date Creek 2010 Trees less than 10 cm tallies.csv",
+                                        snag_heights = "D:/Github/DateCreekData/data-raw/Trees/SnagHeights2010.csv",
+                                        measured_heights2022 = "D:/Github/DateCreekData/data-raw/Trees/StandStructureData_Nov2022_Final.xlsx",
+                                        calc_height = TRUE)
+tree_dt_18 <- DateCreekData::trees_201x(data_file = "D:/Github/DateCreekData/data-raw/Trees/Date Creek 2018 Data large trees_re-entered.xlsx",
+                                        data_2018 = "DataCk re-entry 2018 largeTrees",
+                                        data_2019 = "D:/Github/DateCreekData/data-raw/Trees/Data Creek 2019 Data large trees.csv",
+                                        inter_trees = "D:/Github/DateCreekData/data-raw/Trees/2018-19intermediatetrees.csv",
+                                        small_trees = "D:/Github/DateCreekData/data-raw/Trees/Small trees 2018 2019 KHP.csv",
+                                        lrg_trees_2010 = "D:/Github/DateCreekData/data-raw/Trees/Data Creek 2010 Data large trees.csv",
+                                        measured_heights2022 = "D:/Github/DateCreekData/data-raw/Trees/StandStructureData_Nov2022_Final.xlsx",
+                                        calc_height = TRUE)
+
+tree_dt_22 <- DateCreekData::trees_2022(data_file = "StandStructureData_Nov2022_Final.xlsx",
+                                        large_trees = "Large",
+                                        inter_trees = "Inter",
+                                        small_trees = "Small",
+                                        calc_height = TRUE)
+
+
+
+cruise_labs_92 <- data.table(DateCreekData::get_all_plots_92(cruise_data =
+                                                               "D:/Github/DateCreekData/data-raw/Trees/1992data.csv"))
+cruise_labs_92[, Year := 1992]
+
+tree_dt_92[, Type := ifelse(is.na(DBH), "Seedling",
+                            ifelse(DBH < 5, "Sapling", "Adult"))]
+
+F_trees_dc <- rbind(tree_dt_92)
+F_trees_dc <- merge(F_trees_dc, DateCreekData::Treatments)
+#get all the years and then do this:
+#using calculated heights unless it's a stub, then use stub heights - THIS IS DIFF THAN SORTIE, so
+#likely we should skip this step. 2 trees in 92 that are dead stubs with height 0.
+
+#use plantation heights for plantation trees after 1992
+F_trees_dc[, calc_height := ifelse(Treatment == "CC",
+                                   treeCalcs::height_dbh_plantations(Species = Spp,
+                                                                     DBH = DBH,
+                                                                     BECzone = "ICH"),
+                                   treeCalcs::height_dbh(Species = Spp,
+                                                         DBH = DBH,
+                                                         BECzone = "ICH")),
+           by= seq_len(nrow(F_trees_dc))]
+
+
+
+
+#separate out the seedlings.
+F_trees_dc[, Kg_treeC := ifelse(Type == "Seedling",
+                                 treeCalcs::calc_sm_tree_c_Ung(Species = Spp,
+                                                                Height_class = "31-130",
+                                                                Diam_est = 1,
+                                                                Health = "L"),
+                                 ifelse(StubYN == "N",
+                                        treeCalcs::calc_tree_c(Species = Spp,
+                                                               DBH = DBH,
+                                                               HT = Height,
+                                                               Tree_class = Tree.Class),
+                                        treeCalcs::calc_tree_c(Species = Spp,
+                                                               DBH = DBH,
+                                                               HT = Height, #use calc height even if stub
+                                                               Tree_class = Tree.Class))),
+    by= seq_len(nrow(F_trees_dc))]
+#so this one jives with Erica's calcs
+F_trees_dc[, Kg_treeC := ifelse(Type == "Seedling",
+                                treeCalcs::calc_sm_tree_c_Ung(Species = Spp,
+                                                              Height_class = "31-130",
+                                                              Diam_est = 1,
+                                                              Health = "L"),
+                                ifelse(is.na(cruise_hgt) | cruise_hgt == 0,
+                                       treeCalcs::calc_tree_c(Species = Spp,
+                                                              DBH = DBH,
+                                                              HT = Height,
+                                                              Tree_class = Tree.Class),
+                                       treeCalcs::calc_tree_c(Species = Spp,
+                                                              DBH = DBH,
+                                                              HT = cruise_hgt, 
+                                                              Tree_class = Tree.Class))),
+           by= seq_len(nrow(F_trees_dc))]
+
+F_trees_dc[, Mg_treeC := Kg_treeC/1000]
+F_trees_dc[, MgHa := Mg_treeC * SPH]
+
+# live trees:
+FL_trees_dc <- F_trees_dc[Tree.Class <= 2]
+FL_trees_dc_c <- FL_trees_dc[PlotType == "V" , .(MgHa_plot = sum(MgHa)), 
+                               by = .(Unit, Year, PlotNum)] #sum carbon by cruise plots
+FL_trees_dc_c <- merge(FL_trees_dc_c, cruise_labs_92, 
+                        by = c("Unit","Year","PlotNum"), all.y = TRUE)
+FL_trees_dc_c[is.na(MgHa_plot), MgHa_plot := 0] #merge with all plot ids to capture 0s:
+FL_trees_dc_c  <- FL_trees_dc_c[, .(MgHa = mean(MgHa_plot)), 
+                                  by = .(Unit, Year)]#take the average across cruise plots:
+#add the carbon from fixed plots (all live)
+FL_trees_dc_f <- FL_trees_dc[PlotType == "F"]
+FL_trees_dc_f <- FL_trees_dc_f[, .(MgHa = sum(MgHa)),
+                                 by = .(Unit, Year)]
+
+FL_trees_dc_cf <- rbind(FL_trees_dc_c, FL_trees_dc_f)
+FSL_trees_dc <- FL_trees_dc_cf[, .(MgHa = sum(MgHa)), by = .(Unit, Year)]
+
+# dead trees:
+FD_trees_dc <- F_trees_dc[Tree.Class > 2]
+FD_trees_dc_c <- FD_trees_dc[PlotType == "V" , .(MgHa_plot = sum(MgHa)), 
+                             by = .(Unit, Year, PlotNum)] #sum carbon by cruise plots
+FD_trees_dc_c <- merge(FD_trees_dc_c, cruise_labs_92, 
+                       by = c("Unit","Year","PlotNum"), all.y = TRUE)
+FD_trees_dc_c[is.na(MgHa_plot), MgHa_plot := 0] #merge with all plot ids to capture 0s:
+FD_trees_dc_c  <- FD_trees_dc_c[, .(MgHa = mean(MgHa_plot)), 
+                                by = .(Unit, Year)]#take the average across cruise plots:
+#add the carbon from fixed plots (all live)
+FD_trees_dc_f <- FD_trees_dc[PlotType == "F"]
+FD_trees_dc_f <- FD_trees_dc_f[, .(MgHa = sum(MgHa)),
+                               by = .(Unit, Year)]
+
+FD_trees_dc_cf <- rbind(FD_trees_dc_c, FD_trees_dc_f)
+FSD_trees_dc <- FD_trees_dc_cf[, .(MgHa = sum(MgHa)), by = .(Unit, Year)]
+
+
+
+
+
+
+
+
+
+
+
+
+saveRDS(FSL_trees_dc, file.path(out_path, "FSL_trees_dc.RDS"))
+saveRDS(FSL_trees_dc, file.path(out_path, "FSD_trees_dc.RDS"))
+
 
 #1993:-------------------------------------------------------
 # Count how many plots there are for each treatment unit

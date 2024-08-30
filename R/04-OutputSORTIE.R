@@ -1,5 +1,6 @@
 library(rsortie)
 library(doParallel)
+library(DateCreekData)
 
 ######################### PROCESS SORTIE OUTPUTS ################################
 #SBS---------------------------------------------------------------------------
@@ -99,26 +100,32 @@ parallel::stopCluster(cl)
 #----------------------------------------------------------------------------------
 #ICH---------------------------------------------------------------------------
 #using extract outputs from GUI:
-#5. Extract output -------------------------------------------------------------------
-#subplot extract from SORTIE batch extract files
-Outputs_path <- "D:/Github/SORTIEparams/Outputs/ICH/CompMort/extracted/"
+detailed_path <- "D:/Github/SORTIEparams/Outputs/ICH/CompMort/extracted/"
+Outputs_path <- "./03_out_sortie/01_date_creek/extracted"
+
 Outputs_ending <- "_-ah"
 years_to_extract <- seq(0,30)
 Units_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/UnitBoundaries/"
 Gaps_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/GapCutsDateCreek/"
 
-# 7 Subplot outputs --------------
-DateCreekData::subplot_outputs(out_path = Outputs_path, run_name = Outputs_ending, 
-                               Units_path = Units_path, yrs = years_to_extract,
-                               dist_edge = 50, size_subplot = 17.84, plotting = FALSE)
+# 7 Subplot tree outputs --------------
+DateCreekData::subplot_outputs(out_path = Outputs_path,
+                               det_out_path = detailed_path,
+                               run_name = Outputs_ending, 
+                               Units_path = Units_path, 
+                               yrs = years_to_extract,
+                               dist_edge = 50, size_subplot = 17.84, 
+                               plotting = FALSE)
 #--------------------------------------------------------------------------------------
-
 #get the grids:
-out_path <- "../SORTIEparams/Outputs/ICH/CompMort/" 
-paramFiles_run <- "../SORTIEparams/Inputs/ICH/CompMort/ParameterValues/"
+#out_path <- "../SORTIEparams/Outputs/ICH/CompMort/" 
+#paramFiles_run <- "../SORTIEparams/Inputs/ICH/CompMort/ParameterValues/"
+out_path <- "./03_out_sortie/01_date_creek/"
+run_name <- "ah"
+#paramFiles_run <- "../SORTIEparams/Inputs/ICH/CompMort/ParameterValues/"
 plots <- DateCreekData::Treatments$Unit
 
-files_2_ext <- grep("-ah",list.files(out_path, pattern = "det.gz.tar", 
+files_2_ext <- grep(run_name,list.files(out_path, pattern = "det.gz.tar", 
                                      full.names = FALSE), value = TRUE)
 
 if(!dir.exists(paste0(out_path,"extracted/"))){
@@ -128,7 +135,7 @@ if(!dir.exists(paste0(out_path,"extracted/"))){
 extractFiles(itype = 1, exname = out_path, tarnames = files_2_ext)
 
 extFileDir <- paste0(out_path,"extracted/")
-treat_acronym <- "-ah"
+treat_acronym <- run_name
 treat_parse <- paste0(extFileDir,grep("[[:digit:]].xml$",
                                       grep(treat_acronym,list.files(extFileDir),
                                            value=TRUE),value = TRUE))
@@ -194,5 +201,15 @@ g_dt_all <- foreach::foreach(i=1:length(t_p_l))%dopar%{
 }
 
 parallel::stopCluster(cl)
+
+#output light grids ---------
+outfiles <- grep("-ah", list.files(extFileDir, pattern = ".csv", 
+                                      full.names = TRUE), value = TRUE)
+grid_files <- grep("grids",outfiles, value = TRUE)
+grid_dt <- rbindlist(lapply(grid_files, fread))
+grid_to_output <- grep("GLI",unique(grid_dt$mapnm), value = TRUE)
+glis <- grid_dt[mapnm %in% grid_to_output]
+
+fwrite(glis, paste0(out_path,"/glis.csv"))
 
 

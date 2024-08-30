@@ -1,11 +1,11 @@
 # A.Clason
 library(equivalence)
-source(file.path("R","00-utils","utils.R"))
 library(ggplot2)
 library(data.table)
 library(lme4)
 library(lmerTest)
 library(emmeans)
+source(file.path("R","00-utils","utils.R"))
 
 in_path <- "04_out_carbon"
 out_path <- "05_out_analysis"
@@ -68,15 +68,17 @@ ggplot()+
   ) +
   xlim(c(0,40))+
   ylim(c(0,40))
-ggsave(filename = "SBS_fit_dead.jpg",
-       path = file.path(out_path, "Supplementary"), device='jpeg', dpi=1000)
+ggsave(filename = "SBS_dead_fit.png",
+       path = file.path(out_path, "Supplementary"), device='png', dpi=1200)
 
 MSD_trees_sl_sum <- Rmisc::summarySE(data = MSD_trees_sl[Year < 2092], 
                                      measurevar = "MgUnit", 
-                                     groupvars = c("treatment","Year"))
+                                     groupvars = c("treatment","Year"),
+                                     na.rm = TRUE)
 FSD_trees_sl_sum <- Rmisc::summarySE(data = FSD_trees_sl, 
                                      measurevar = "MgUnit", 
-                                     groupvars = c("treatment","Year"))
+                                     groupvars = c("treatment","Year"),
+                                     na.rm = TRUE)
 
 ggplot(NULL,
        aes(x = Year, y = MgUnit, fill = treatment, group = treatment)) +

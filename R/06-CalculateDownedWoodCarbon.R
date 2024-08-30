@@ -170,9 +170,10 @@ saveRDS(F_cwd_sl_s, file.path(out_path,"FS_cwd_sl_sg.RDS")) #by species groups
 out_path <- "../SORTIEParams/Outputs/ICH/CompMort/extracted/" 
 
 #read in the grids:
-gridFiles <- list.files(out_path, pattern = "grid", full.names = TRUE)
+gridFiles <- grep("ah",list.files(out_path, pattern = "grid", full.names = TRUE),
+                   value = TRUE)
 grid_list <- lapply(gridFiles, fread)
-grid_dt <- rbindlist(grid_list)
+grid_dt <- rbindlist(grid_list) #x & y still gets updated in the maskgrids function!
 
 #clip by unit boundaries
 
@@ -181,7 +182,7 @@ Gaps_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/GapCutsD
 
 grid_to_output <- grep("vlog",unique(grid_dt$colnames), value = TRUE)
 
-vlogs <- maskGrids(Blocks = DateCreekData::Treatments$Unit,
+vlogs <- DateCreekData::maskGrids(Blocks = DateCreekData::Treatments$Unit,
                    Units_path = Units_path, Gaps_path = Gaps_path,
                    NoCells_ToSample = NA, include_xy = TRUE,
                    grid_dat = grid_dt, output = "table",
@@ -205,8 +206,14 @@ totlogs[,timestep := as.numeric(as.character(timestep))]
 totlogs_tr <- merge(totlogs, DateCreekData::Treatments, by = "Unit")
 totlogs_tr[,values:=value]
 
-
-
+#plot the rasters
+#library(rasterVis)
+#library(ggplot2)
+#gplot(logvol_gr_r$D2) + 
+ # geom_tile(aes(fill = value)) +
+#  facet_wrap(~ variable)+
+ # scale_fill_gradient(low = 'black', high = 'yellow') +
+#  theme_minimal()
 
 spGroups <- data.table(Sp =c("Hw","Cw","Ba", "Bl","Sx","Pl","At","Ac","Ep"),
                        SpGrp = c(1,2,1,1,1,1,3,3,3))
@@ -219,6 +226,20 @@ M_cwd_dc <- cwdc_dc[,.(pixMgHa = sum(MgHa), pixVolHa = sum(values)),
 #Add then take the average value across the whole unit
 MS_cwd_dc <- M_cwd_dc[,.(MgHa = mean(pixMgHa), VolHa = mean(pixVolHa)),
                       by = c("Treatment","Unit","timestep")]
+MS_cwd_dc[, Year := timestep + 1992]
+
+#saveRDS(cwdc_dc, file.path(out_path, "MS_cwd_dc_spdec.RDS"))
+saveRDS(MS_cwd_dc, file.path(out_path,"MS_cwd_dc.RDS"))
+
+#by decay class:
+MS_cwd_dc_sp_d <- cwdc_dc[,.(pixMgHa = sum(MgHa), pixVolHa = sum(values)),
+                        by = c("Treatment","Unit","timestep","DecayClass",
+                               "SpGrp","ID")]
+#Add then take the average value across the whole unit
+MS_cwd_dc_sp_d <- MS_cwd_dc_sp_d[,.(MgHa = mean(pixMgHa), VolHa = mean(pixVolHa)),
+                             by = c("Treatment","Unit","timestep","DecayClass", "SpGrp")]
+MS_cwd_dc_sp_d[, Year := timestep + 1992][, timestep := NULL]
+saveRDS(MS_cwd_dc_sp_d, file.path(out_path,"MS_cwd_dc_sp_d.RDS"))
 
 
 # Field----------------------------------------------------------------
@@ -227,7 +248,7 @@ MS_cwd_dc <- M_cwd_dc[,.(MgHa = mean(pixMgHa), VolHa = mean(pixVolHa)),
 ##### DOWNED WOOD VOL/HA #########
 
 #calculate volumes from data 
-F_cwd_dc <- DateCreekData::CWD_vol_calc(dat_loc = "C:/GitHub/DateCreekData/data-raw/CWD/", 
+F_cwd_dc <- DateCreekData::CWD_vol_calc(dat_loc = "D:/GitHub/DateCreekData/data-raw/CWD/", 
                                         incl_sp_decay = TRUE)
 #should add species cleanup to the volume function
 F_cwd_dc[, Sp := ifelse(Sp=="u","U",
@@ -273,6 +294,8 @@ F_cwd_dc <- merge(F_cwd_dc_all, treeCalcs::cwdC_conv_table[is.na(BECzone)| BECzo
 setnames(F_cwd_dc, c("AbsoluteDensity","StructuralReductionFactor","CarbonConversionFactor"),
          c("AbsDens","StrRedFac","CarbConvFac"))
 F_cwd_dc[is.na(AbsDens)]
+#add treatment
+F_cwd_dc <- merge(F_cwd_dc, DateCreekData::Treatments, by = "Unit", all.x = TRUE)
 
 # so originally, I scripted this, but I updated the treeCalcs::cwdC_conv_table to estimate unknowns
 # for each BEC zone - probably not the right way, but for now, it'll do.
@@ -334,30 +357,77 @@ F_cwd_dc[is.na(AbsDens)]
 F_cwd_dc[, MgHa:= VolumeHa * AbsDens * StrRedFac * CarbConvFac, by = seq_len(nrow(F_cwd_dc))]
 
 #summarize by treatment, unit and year ----------------------------------------------------------
-F_cwd_dc <- merge(F_cwd_dc, DateCreekData::Treatments, by = "Unit", all.x = TRUE)
 
 #update Yrs post:
-F_cwd_dc[, Yrs_Post:= ifelse(Year == 1992,0,
-                             ifelse(Year == 1993, 1,
-                                    ifelse(Year == 2011, 19, 27)))]
+#F_cwd_dc[, Yrs_Post:= ifelse(Year == 1992,0,
+ #                            ifelse(Year == 1993, 1,
+  #                                  ifelse(Year == 2011, 19, 27)))]
 
 #when including species decay, need to get the plot totals, then means then sum of means
 # sum all the piece volumes and carbon by plot
 plotTots <- F_cwd_dc[, .(plotVol = sum(VolumeHa), plotMg = sum(MgHa)),
-                     by = .(Treatment, Unit, Year, Yrs_Post, Sp, Decay, Unique_plot)]
+                     by = .(Treatment, Unit, Year, Sp, Decay, Unique_plot)]
 
 # take the mean vol and mg by species decay class and year across plots for each unit
 FS_cwd_dc_sp_d <- plotTots[, .(VolHa = mean(plotVol), MgHa = mean(plotMg)),
-                           by = .(Treatment, Unit, Year, Yrs_Post, Sp, Decay)]
+                           by = .(Treatment, Unit, Year, Sp, Decay)]
 
 #if you want the overall volume of MgHa, then sum all the average values together by unit
 FS_cwd_dc <- FS_cwd_dc_sp_d[, .(VolHa = sum(VolHa), MgHa = sum(MgHa)),
-                            by = .(Treatment, Unit, Year, Yrs_Post)]
+                            by = .(Treatment, Unit, Year)]
 
 #return(F_cwd_dc)
+saveRDS(FS_cwd_dc, file.path(out_path,"FS_cwd_dc.RDS"))
 
 
 
+#calc by groups (same as modelled) OPTIONAL ------------------------------------------
+#calculate carbon:---------
+#F_cwd_dc[, MgHa:= VolumeHa * AbsDens * StrRedFac * CarbConvFac, 
+ #        by = seq_len(nrow(F_cwd_dc))]
 
+#get treatment, unit and year
+#F_cwd_sl[, unit:= tstrsplit(Plot, "-", fixed=TRUE, keep = 2)]
+#F_cwd_sl[,`:=`(unit = as.numeric(unit),timestep = (Year - 1992))]
+#F_cwd_sl[,`:=`(timestep = (Year - 1992))]
+#F_cwd_dc_s <- merge(F_cwd_dc, spGroups, by.x = "Sp", by.y = "Sp", 
+                   # all.x = TRUE)
+#F_cwd_dc_s[is.na(SpGrp), SpGrp := 1]
+
+#when including species decay and we want to summarize by decay class and species group,
+#need to get the plot totals for each decay class - species group combination, 
+#then means then sum of means and sum all the piece volumes and carbon by plot
+
+decay_grp_dens <- F_cwd_dc[ ,.(mnAbsDens = mean(AbsDens),
+                                 mnCarbConc = mean(CarbConvFac)),
+                              by=c("Decay", "SpGrp")]
+
+F_cwd_dc[,`:=`(DecFac = ifelse(Decay==1,1,
+                                 ifelse(Decay==2,1,
+                                        ifelse(Decay==3,0.8,
+                                               ifelse(Decay==4,0.8,
+                                                      ifelse(Decay==5,0.412,NA))))))]
+F_cwd_dc <- merge(decay_grp_dens, F_cwd_dc, by.x = c("Decay","SpGrp"), 
+                    by.y = c("Decay","SpGrp"))
+
+#F_cwd_sl_s[, MgHa := VolHa*DecFac*mnAbsDens*mnCarbConc, by=seq_len(nrow(volGrid))]
+F_cwd_dc[, MgHa := VolumeHa * DecFac * mnAbsDens * mnCarbConc, 
+         by=seq_len(nrow(F_cwd_dc))]
+#summarize by treatment, unit and year ------------------------
+#F_cwd_sl_s[, unit:= tstrsplit(Plot, "-", fixed=TRUE, keep = 2)]
+#F_cwd_sl_s[,`:=`(unit = as.numeric(unit),timestep = (Year - 1992))]
+#SummitLakeData::Treatments[, unit := as.numeric(unit)] #stop fliflopping - fix above
+plotTots <- F_cwd_dc[, .(plotVol = sum(VolumeHa), plotMg = sum(MgHa)),
+                     by = .(Treatment, Unit, Year, SpGrp, Decay, Unique_plot)]
+
+# take the mean vol and mg by species decay class and year across plots for each unit
+FS_cwd_dc_sp_d <- plotTots[, .(VolHa = mean(plotVol), MgHa = mean(plotMg)),
+                           by = .(Treatment, Unit, Year, SpGrp, Decay)]
+
+#if you want the overall volume of MgHa, then sum all the average values together by unit
+#FS_cwd_dc <- FS_cwd_dc_sp_d[, .(VolHa = sum(VolHa), MgHa = sum(MgHa)),
+ #                           by = .(Treatment, Unit, Year)]
+setnames(FS_cwd_dc_sp_d, "Decay", "DecayClass")
+saveRDS(FS_cwd_dc_sp_d, file.path(out_path,"FS_cwd_dc_sp_d.RDS")) #by species groups
 
 

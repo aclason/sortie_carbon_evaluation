@@ -1,12 +1,11 @@
 # A.Clason
 library(equivalence)
-source(file.path("R","00-utils","utils.R"))
 library(ggplot2)
 library(data.table)
 library(lme4)
 library(lmerTest)
 library(emmeans)
-
+source(file.path("R","00-utils","utils.R"))
 in_path <- "04_out_carbon"
 out_path <- "05_out_analysis"
 
@@ -69,6 +68,7 @@ MF_trees_sl_sp_m <- melt(MF_trees_sl_sp,
                               value.name = "MgHa")
 MF_trees_sl_sp_m[, Type := ifelse(Type == "MgHa_obs", "obs", "pred")]
 
+# Carbon predicted vs observed 
 ggplot()+
   geom_point(aes(x = MgHa_pred, y = MgHa_obs, group = as.factor(unit), 
                  color = treatment), 
@@ -85,14 +85,17 @@ ggplot()+
   labs(
     x = "Carbon (Mg/ha) predicted",
     y = "Carbon (Mg/ha) observed",
-    col = "Treatment",
+    col = NULL,
     fill = "Treatment",
     shape = "Treatment"
   ) +
   xlim(c(0,120))+
-  ylim(c(0,120))
-ggsave(filename = "SBS_fit.jpg",
-       path = file.path(out_path), device='jpeg', dpi=1000)
+  ylim(c(0,120))+
+  theme(legend.position = "bottom")+
+  guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
+  guides(color = guide_legend(override.aes = list(size = 5)))
+ggsave(filename = "SBS_live_fit.png",
+       path = file.path(out_path), device='png', dpi=1200)
 
 ggplot()+
   geom_point(aes(x = MgHa_pred, y = MgHa_obs, group = as.factor(unit), 
@@ -101,8 +104,23 @@ ggplot()+
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey")+
   xlim(c(0,120))+
   ylim(c(0,120))+
-  theme_minimal()+
-  facet_wrap(~Year)
+  scale_color_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  labs(
+    x = "Carbon (Mg/ha) predicted",
+    y = "Carbon (Mg/ha) observed",
+    col = NULL
+  ) +
+  theme(legend.position = "bottom",
+        strip.text = element_text(face = "bold", size = 12))+
+  facet_wrap(~Year)+
+  guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
+  guides(color = guide_legend(override.aes = list(size = 5)))
+ggsave(filename = "SBS_live_fit_by_year.png",
+       path = file.path(out_path, "Supplementary"), device='png', dpi=1200)
 
 MSL_trees_sl_sum <- Rmisc::summarySE(data = MSL_trees_sl[Year < 2092], 
                                      measurevar = "MgUnit", 
@@ -152,13 +170,13 @@ ggplot(NULL,
     size = 1 ,
     position = position_dodge(width = 3)
   )+
-  geom_line(
-    data = MSL_trees_sl,
-    aes(group = unit, color = treatment),
-    alpha = 0.7,
-    linetype = "dotted"
+  #geom_line(
+  #  data = MSL_trees_sl,
+   # aes(group = unit, color = treatment),
+   # alpha = 0.7,
+   # linetype = "dotted"
     #color = "grey"
-  ) +
+ # ) +
   scale_shape_manual(
     values = c(24, 23, 21),
     breaks = c("light/no", "med", "heavy"),
