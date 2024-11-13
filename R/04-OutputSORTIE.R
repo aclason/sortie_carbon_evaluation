@@ -100,11 +100,13 @@ parallel::stopCluster(cl)
 #----------------------------------------------------------------------------------
 #ICH---------------------------------------------------------------------------
 #using extract outputs from GUI:
-detailed_path <- "D:/Github/SORTIEparams/Outputs/ICH/CompMort/extracted/"
-Outputs_path <- "./03_out_sortie/01_date_creek/extracted"
+in_dir <- file.path("03_out_sortie", "01_date_creek")
 
-Outputs_ending <- "_-ah"
-years_to_extract <- seq(0,30)
+detailed_path <- "./03_out_sortie/01_date_creek/extracted/"
+Outputs_path <- "./03_out_sortie/01_date_creek/extracted/"
+
+Outputs_ending <- "_-"
+years_to_extract <- seq(0,100)
 Units_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/UnitBoundaries/"
 Gaps_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/GapCutsDateCreek/"
 
@@ -116,12 +118,13 @@ DateCreekData::subplot_outputs(out_path = Outputs_path,
                                yrs = years_to_extract,
                                dist_edge = 50, size_subplot = 17.84, 
                                plotting = FALSE)
+
 #--------------------------------------------------------------------------------------
 #get the grids:
 #out_path <- "../SORTIEparams/Outputs/ICH/CompMort/" 
-#paramFiles_run <- "../SORTIEparams/Inputs/ICH/CompMort/ParameterValues/"
+##paramFiles_run <- "../SORTIEparams/Inputs/ICH/CompMort/ParameterValues/"
 out_path <- "./03_out_sortie/01_date_creek/"
-run_name <- "ah"
+run_name <- ""
 #paramFiles_run <- "../SORTIEparams/Inputs/ICH/CompMort/ParameterValues/"
 plots <- DateCreekData::Treatments$Unit
 
@@ -144,7 +147,7 @@ numcores <- 16
 parse_grids <- 1
 parse_trees <- 0 #keep this at zero - takes way too long without only passing subplots
 # which years to parse
-yrs <- seq(0,30) 
+yrs <- seq(0,100) 
 
 t_p <- grep(paste(paste0("_",yrs,".xml"),collapse = "|"),treat_parse, value = TRUE)
 
@@ -203,13 +206,14 @@ g_dt_all <- foreach::foreach(i=1:length(t_p_l))%dopar%{
 parallel::stopCluster(cl)
 
 #output light grids ---------
-outfiles <- grep("-ah", list.files(extFileDir, pattern = ".csv", 
-                                      full.names = TRUE), value = TRUE)
+outfiles <- list.files(extFileDir, pattern = ".csv", full.names = TRUE)
 grid_files <- grep("grids",outfiles, value = TRUE)
 grid_dt <- rbindlist(lapply(grid_files, fread))
 grid_to_output <- grep("GLI",unique(grid_dt$mapnm), value = TRUE)
 glis <- grid_dt[mapnm %in% grid_to_output]
 
-fwrite(glis, paste0(out_path,"/glis.csv"))
+#just output first 30 years
+
+fwrite(glis[timestep <31], paste0(out_path,"glis.csv"))
 
 

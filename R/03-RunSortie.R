@@ -7,13 +7,13 @@ library(rsortie)
 #allow more flexibility in run setup
 in_dir <- file.path("02_init_sortie","02_summit_lake","ParameterFiles")
 
-files2run <- list.files(in_dir,"logProps.xml", full.names = TRUE)
+files2run <- list.files(in_dir,"6-logProps.xml", full.names = TRUE)
 #files2run <- list.files(My_newxmlPath,"ds_part.xml", full.names = TRUE)
 #files2run <- grep("SBS-s",list.files(My_newxmlPath, full.names = TRUE), 
  #                 value = TRUE)
 
 #1. update the number of years for the run
-updateNumYears(files2run, 30)
+updateNumYears(files2run, 100)
 
 runSortiePar(files2run, numcores = length(files2run), sortie_loc = 0)
 

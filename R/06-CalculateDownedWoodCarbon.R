@@ -167,13 +167,13 @@ saveRDS(F_cwd_sl_s, file.path(out_path,"FS_cwd_sl_sg.RDS")) #by species groups
 #ICH-------------------------------------------------------------------------------------------
 
 # Model-----------------------------------------------------------
-out_path <- "../SORTIEParams/Outputs/ICH/CompMort/extracted/" 
+#output light grids ---------
+#out_path <- "../SORTIEParams/Outputs/ICH/CompMort/extracted/" 
 
 #read in the grids:
-gridFiles <- grep("ah",list.files(out_path, pattern = "grid", full.names = TRUE),
-                   value = TRUE)
-grid_list <- lapply(gridFiles, fread)
-grid_dt <- rbindlist(grid_list) #x & y still gets updated in the maskgrids function!
+outfiles <- list.files(in_path, pattern = ".csv", full.names = TRUE)
+grid_files <- grep("grids",outfiles, value = TRUE)
+grid_dt <- rbindlist(lapply(grid_files, fread))#x & y still gets updated in the maskgrids function!
 
 #clip by unit boundaries
 

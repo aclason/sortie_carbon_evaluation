@@ -97,3 +97,11 @@ archive/
 05_out_analysis/
 
 03_out_sortie/01_date_creek/extracted/
+
+*.out
+
+*.tar
+
+03_out_sortie/01_date_creek/glis.csv
+
+02_init_sortie/01_date_creek/FileLists/

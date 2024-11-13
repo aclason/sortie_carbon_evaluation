@@ -13,8 +13,10 @@ theme_set(theme_minimal(base_family = "Arial") +  # Change "Arial" to your desir
     text = element_text(family = "Arial"),  # Change "Arial" to your desired font
     plot.title = element_text(size = 14, face = "bold"),
     axis.title = element_text(size = 14, face = "bold"),
-    axis.text = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 12, face = "bold")
+    axis.text = element_text(size = 14, face = "bold"),
+    legend.text = element_text(size = 14, face = "bold"),
+    strip.text = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
   ))
 
 
@@ -87,19 +89,51 @@ equi_boot <- function(actual, predicted, n_bootstraps = 1000,
 
 
 
-select_years <- function(year, data) {
+#select_years <- function(year, data, meas_obs, meas_pred) {
+#  if (year == "All Years") {
+#    obs <- data$meas_obs
+#    pred <- data$meas_pred
+ #   n_value <- nrow(data)
+#  } else {
+#    dt <- data
+ #   obs <- dt[Year == year]$meas_obs
+#    pred <- dt[Year == year]$meas_pred
+#   n_value <- nrow(dt[Year == year])
+#  }
+#  list(obs = obs, pred = pred, n_value = n_value)
+#}
+
+select_years <- function(year, data, meas_obs, meas_pred) {
+  # Ensure the column names are interpreted correctly
+  meas_obs <- enquo(meas_obs)
+  meas_pred <- enquo(meas_pred)
+  
   if (year == "All Years") {
-    obs <- data$MgHa_obs
-    pred <- data$MgHa_pred
+    obs <- data %>% pull(!!meas_obs)
+    pred <- data %>% pull(!!meas_pred)
     n_value <- nrow(data)
   } else {
-    dt <- data
-    obs <- dt[Year == year]$MgHa_obs
-    pred <- dt[Year == year]$MgHa_pred
-    n_value <- nrow(dt[Year == year])
+    dt <- data %>% filter(Year == year)
+    obs <- dt %>% pull(!!meas_obs)
+    pred <- dt %>% pull(!!meas_pred)
+    n_value <- nrow(dt)
   }
+  
   list(obs = obs, pred = pred, n_value = n_value)
 }
+#select_years <- function(year, data, meas) {
+ # if (year == "All Years") {
+#    obs <- data$MgHa_obs
+#    pred <- data$MgHa_pred
+#    n_value <- nrow(data)
+#  } else {
+#    dt <- data
+#    obs <- dt[Year == year]$MgHa_obs
+#    pred <- dt[Year == year]$MgHa_pred
+#    n_value <- nrow(dt[Year == year])
+ # }
+#  list(obs = obs, pred = pred, n_value = n_value)
+#}
 
 select_sp <- function(sp, data) {
   obs <- data[Species == sp]$MgHa_obs

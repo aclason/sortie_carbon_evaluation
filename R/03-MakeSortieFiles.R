@@ -1,5 +1,6 @@
 library(rsortie)
 library(data.table)
+
 #SBS---------------------------------------------------------------------------
 in_dir <- file.path("02_init_sortie", "02_summit_lake") 
 
@@ -95,29 +96,28 @@ runSortiePar(files2run, numcores = length(files2run), sortie_loc = 0)
 
 
 #ICH---------------------------------------------------------------------------
+in_dir <- file.path("02_init_sortie", "01_date_creek") 
+
 #1. Make Sortie files from initial conditions and specifics to each harvest type
 #2. Apply the harvest
 #3. Update detailed substrate (proportion cwd?)
 #4. open the files and save in Sortie gui (file does not compress properly with harvest update)
  
-
-
-loc_path <- "D:/GitHub/SORTIEparams/Inputs/ICH/CompMort/" 
-My_basePath <- paste0(loc_path,"ParameterFiles/BaseFiles/") 
-My_newxmlPath <- paste0(loc_path,"ParameterFiles/") 
-My_newvalsPath <- paste0(loc_path,"ParameterValues/") 
+My_basePath <- paste0(in_dir,"/ParameterFiles/BaseFiles/") 
+My_newxmlPath <- paste0(in_dir,"/ParameterFiles/") 
+My_newvalsPath <- paste0(in_dir,"/ParameterValues/") 
 
 TreatType <- c("CC","HR","LR","NH")
 for(tt in 1:length(TreatType)){
   RunType <- TreatType[tt]
   if(RunType=="CC"){
-    lstOfFiles <- read.csv(paste0(loc_path,"FileLists/IniTClearCut.csv"))
+    lstOfFiles <- read.csv(paste0(in_dir,"/FileLists/IniTClearCut.csv"))
   }else if(RunType=="HR"){
-    lstOfFiles <- read.csv(paste0(loc_path,"FileLists/InitHeavyHarvest.csv"))
+    lstOfFiles <- read.csv(paste0(in_dir,"/FileLists/InitHeavyHarvest.csv"))
   }else if(RunType=="LR"){
-    lstOfFiles <- read.csv(paste0(loc_path,"FileLists/InitLightHarvest.csv"))
+    lstOfFiles <- read.csv(paste0(in_dir,"/FileLists/InitLightHarvest.csv"))
   }else{ 
-    lstOfFiles <- read.csv(paste0(loc_path,"FileLists/InitNoHarvest.csv"))
+    lstOfFiles <- read.csv(paste0(in_dir,"/FileLists/InitNoHarvest.csv"))
   }
   makeFiles(lstFiles = lstOfFiles, path_basexmls = My_basePath,
             path_newxmls = My_newxmlPath, path_newvals= My_newvalsPath)
@@ -128,7 +128,7 @@ for(tt in 1:length(TreatType)){
 Units_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/UnitBoundaries/"
 Gaps_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/GapCutsDateCreek/"
 
-file_names <- list.files(My_newxmlPath, pattern = "-ah")
+file_names <- list.files(My_newxmlPath, pattern = ".xml")
 
 DateCreekData::apply_harvest(NewxmlPath = My_newxmlPath, Units_path = Units_path, 
                              Gaps_path = Gaps_path, file_names = file_names)
@@ -370,8 +370,7 @@ for(i in 1:length(DateCreekData::Treatments$Unit)){
                             "logProps.csv"))
   
   parFile <- grep(DateCreekData::Treatments$Unit[i],
-                  grep("-ah",list.files(My_newxmlPath), 
-                       value = TRUE), value = TRUE)
+                 list.files(My_newxmlPath), value = TRUE)
   
   lstOfFiles <- data.frame("type"=c(0,1),
                            "name"=c(parFile, paste0(DateCreekData::Treatments$Unit[i],
@@ -383,9 +382,8 @@ for(i in 1:length(DateCreekData::Treatments$Unit)){
 }
 
 
-files2run <- grep("ah", grep("logProps",list.files(My_newxmlPath, full.names = TRUE), 
-                             value = TRUE), value = T)
-updateNumYears(files2run, 30)
+files2run <- list.files(My_newxmlPath, full.names = TRUE, pattern = "logProps")
+updateNumYears(files2run, 100)
 
 runSortiePar(fname = files2run, numcores = 16, sortie_loc=0)
 
