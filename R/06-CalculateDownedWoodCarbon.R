@@ -84,7 +84,7 @@ saveRDS(MS_cwd_sl_dc, file.path(out_path,"MS_cwd_sl_dc_sg.RDS"))
 # Field----------------------------------------------------------------
 #calculate volumes from data 
 F_cwd_sl <- SummitLakeData::CWD_2021_Vol_calc(CWD_dat = "D:/GitHub/SummitLakeData/data-raw/EP1162CWDsurvey2020-2021.csv",
-                                              Horiz_dat = "D:/GitHub/SummitLakeData/data-raw/EP1162CWDsurveyTransectLines2020-2021.csv",
+                                         Horiz_dat = "D:/GitHub/SummitLakeData/data-raw/EP1162CWDsurveyTransectLines2020-2021.csv",
                                               out_carbon_comp = TRUE)
 
 #F_cwd_sl[, DecayClass:= as.numeric(DecayClass)]
@@ -169,10 +169,10 @@ F_cwd_sl_s[, MgHa := VolumeHa*DecFac*mnAbsDens*mnCarbConc, by=seq_len(nrow(F_cwd
 #F_cwd_sl_s[, unit:= tstrsplit(Plot, "-", fixed=TRUE, keep = 2)]
 #F_cwd_sl_s[,`:=`(unit = as.numeric(unit),timestep = (Year - 1992))]
 #SummitLakeData::Treatments[, unit := as.numeric(unit)] #stop fliflopping - fix above
-F_cwd_sl_s <- merge(F_cwd_sl_s[,.(Unit,Year,Decay,VolumeHa,MgHa)], 
+F_cwd_sl_s <- merge(F_cwd_sl_s[,.(Unit,Year,SpGrp,Decay,VolumeHa,MgHa)], 
                   SummitLakeData::Treatments, by.x = "Unit",by.y = "unit")
 
-saveRDS(F_cwd_sl_s, file.path(out_path,"FS_cwd_sl_sg.RDS")) #by species groups
+saveRDS(F_cwd_sl_s, file.path(out_path,"FS_cwd_sl_dc_sg.RDS")) #by species groups
 
 
 
@@ -183,7 +183,8 @@ saveRDS(F_cwd_sl_s, file.path(out_path,"FS_cwd_sl_sg.RDS")) #by species groups
 #out_path <- "../SORTIEParams/Outputs/ICH/CompMort/extracted/" 
 
 #read in the grids:
-outfiles <- list.files(in_path, pattern = ".csv", full.names = TRUE)
+outfiles <- list.files(file.path(in_path,"01_date_creek","extracted"),
+                       pattern = ".csv", full.names = TRUE)
 grid_files <- grep("grids",outfiles, value = TRUE)
 grid_dt <- rbindlist(lapply(grid_files, fread))#x & y still gets updated in the maskgrids function!
 
@@ -251,7 +252,7 @@ MS_cwd_dc_sp_d <- cwdc_dc[,.(pixMgHa = sum(MgHa), pixVolHa = sum(values)),
 MS_cwd_dc_sp_d <- MS_cwd_dc_sp_d[,.(MgHa = mean(pixMgHa), VolHa = mean(pixVolHa)),
                              by = c("Treatment","Unit","timestep","DecayClass", "SpGrp")]
 MS_cwd_dc_sp_d[, Year := timestep + 1992][, timestep := NULL]
-saveRDS(MS_cwd_dc_sp_d, file.path(out_path,"MS_cwd_dc_sp_d.RDS"))
+saveRDS(MS_cwd_dc_sp_d, file.path(out_path,"MS_cwd_dc_dc_sg.RDS"))
 
 
 # Field----------------------------------------------------------------
@@ -440,6 +441,6 @@ FS_cwd_dc_sp_d <- plotTots[, .(VolHa = mean(plotVol), MgHa = mean(plotMg)),
 #FS_cwd_dc <- FS_cwd_dc_sp_d[, .(VolHa = sum(VolHa), MgHa = sum(MgHa)),
  #                           by = .(Treatment, Unit, Year)]
 setnames(FS_cwd_dc_sp_d, "Decay", "DecayClass")
-saveRDS(FS_cwd_dc_sp_d, file.path(out_path,"FS_cwd_dc_sp_d.RDS")) #by species groups
+saveRDS(FS_cwd_dc_sp_d, file.path(out_path,"FS_cwd_dc_dc_sg.RDS")) #by species groups
 
 

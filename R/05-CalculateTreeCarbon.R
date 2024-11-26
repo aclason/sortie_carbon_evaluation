@@ -14,14 +14,25 @@ out_path <- file.path("04_out_carbon")
 My_newvalsPath <- file.path("02_init_sortie","02_summit_lake","ParameterValues")
 sum_in_path <- file.path(in_path, "02_summit_lake","extracted")
 
-run_name <- "ds-nci_si-"
+run_name <- "ds-nci_si_6"
 outfiles <- grep(run_name, list.files(sum_in_path, pattern = ".csv", 
                                       full.names = TRUE), value = TRUE)
 plots <- stringr::str_split(list.files(My_newvalsPath, pattern = "summit"),".csv",
                             simplify = TRUE)[,1]
 
 tree_files <- grep("trees",outfiles, value = TRUE)
-tree_dt <- rbindlist(lapply(tree_files, fread))
+#tree_dt <- rbindlist(lapply(tree_files, fread))
+tree_dt <- rbindlist(
+  lapply(tree_files, function(file) {
+    # Read each file
+    fread(file) # Read all as character to avoid type issues
+  }),
+  use.names = TRUE, # Match columns by name
+  fill = TRUE       # Fill missing columns with NA
+)
+
+tree_dt[!is.na(dead)]
+unique(tree_dt[!is.na(Fall)]$Fall)
 
 #clip to centre 1 ha:
 tree_dt <- tree_dt[X >50 & X <150 & Y >50 & Y <150]

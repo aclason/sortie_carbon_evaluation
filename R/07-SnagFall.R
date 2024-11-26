@@ -24,9 +24,9 @@ tree_dt <- rbindlist(lapply(tree_files, fread))
 #clip to centre 1 ha:
 tree_dt <- tree_dt[X >50 & X <150 & Y >50 & Y <150]
 
-tree_dt[tree_species == "Subalpine_Fir" & Unit == "summit_8" & X == 133.798]
+tree_dt[tree_species == "Subalpine_Fir" & unit == 8 & X == 133.798]
 tree_dt[Type == "Snag" & dead == 0]
-tree_dt[, UniqXY := paste0(Unit,"_",X,"_",Y)]
+tree_dt[, UniqXY := paste0(unit,"_",X,"_",Y)]
 setkey(tree_dt,UniqXY)
 
 #1. Label the row with whether a snag is created, or snag falls. 
