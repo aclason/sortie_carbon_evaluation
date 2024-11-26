@@ -58,15 +58,27 @@ MS_cwd_sl[, Year := ifelse(unit == 4, 1994 + timestep,
 saveRDS(MS_cwd_sl, file.path(out_path,"MS_cwd_sl.RDS"))
 #MS_cwd_sl[,Unit:=as.numeric(unit)] #deal with this earlier
 
+#by decay class
 MS_cwd_sl_dc <- cwdc_sm[,.(pixMgHa = sum(MgHa), pixVolHa = sum(values)),
                         by = c("treatment","unit","timestep","DecayClass","point_id")]
 #Add then take the average value across the whole unit
 MS_cwd_sl_dc <- MS_cwd_sl_dc[,.(MgHa = mean(pixMgHa), VolHa = mean(pixVolHa)),
-                      by = c("treatment","unit","timestep","DecayClass")]
+                             by = c("treatment","unit","timestep","DecayClass")]
 MS_cwd_sl_dc[, Year := ifelse(unit == 4, 1994 + timestep,
-                           ifelse(unit == 15, 1994 + timestep,
-                                  1992 + timestep))]
+                              ifelse(unit == 15, 1994 + timestep,
+                                     1992 + timestep))]
 saveRDS(MS_cwd_sl_dc, file.path(out_path,"MS_cwd_sl_dc.RDS"))
+
+#by decay class and species groups
+MS_cwd_sl_dc <- cwdc_sm[,.(pixMgHa = sum(MgHa), pixVolHa = sum(values)),
+                        by = c("treatment","unit","timestep","DecayClass","SpGrp","point_id")]
+#Add then take the average value across the whole unit
+MS_cwd_sl_dc <- MS_cwd_sl_dc[,.(MgHa = mean(pixMgHa), VolHa = mean(pixVolHa)),
+                             by = c("treatment","unit","timestep","DecayClass","SpGrp")]
+MS_cwd_sl_dc[, Year := ifelse(unit == 4, 1994 + timestep,
+                              ifelse(unit == 15, 1994 + timestep,
+                                     1992 + timestep))]
+saveRDS(MS_cwd_sl_dc, file.path(out_path,"MS_cwd_sl_dc_sg.RDS"))
 
 
 # Field----------------------------------------------------------------

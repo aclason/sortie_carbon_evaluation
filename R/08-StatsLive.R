@@ -60,18 +60,18 @@ t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Bl
 t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Sx"]$val_ha,
        MF_trees_sl_sp_m[obs_preds == "pred" & val_type == "MgHa" & Species == "Sx"]$val_ha)
 #Sx not sig diff
-t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Bl" & TSH < 5]$val_ha,
-       MF_trees_sl_sp_m[obs_preds == "pred" & val_type == "MgHa" & Species == "Bl" & TSH < 5]$val_ha)
+t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Bl" & Year < 1997]$val_ha,
+       MF_trees_sl_sp_m[obs_preds == "pred" & val_type == "MgHa" & Species == "Bl" & Year < 1997]$val_ha)
 #Bl not sig diff at the start
-t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Sx"& TSH < 5]$val_ha,
-       MF_trees_sl_sp_m[obs_preds == "pred" & val_type == "MgHa" & Species == "Sx"& TSH < 5]$val_ha)
+t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Sx"& Year < 1997]$val_ha,
+       MF_trees_sl_sp_m[obs_preds == "pred" & val_type == "MgHa" & Species == "Sx"& Year < 1997]$val_ha)
 #Sx not sig diff at the start
 
-t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Bl" & TSH == 28]$val_ha,
-       MF_trees_sl_sp_m[obs_preds == "pred" & val_type == "MgHa" & Species == "Bl" & TSH == 28]$val_ha)
+t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Bl" & Year == 28]$val_ha,
+       MF_trees_sl_sp_m[obs_preds == "pred" & val_type == "MgHa" & Species == "Bl" & Year == 28]$val_ha)
 #Bl not sig diff at the end - but trending towards significance
-t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Sx"& TSH == 28]$val_ha,
-       MF_trees_sl_sp_m[obs_preds == "pred" & val_type == "MgHa" & Species == "Sx"& TSH == 28]$val_ha)
+t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Sx"& Year == 28]$val_ha,
+       MF_trees_sl_sp_m[obs_preds == "pred" & val_type == "MgHa" & Species == "Sx"& Year == 28]$val_ha)
 #Sx not sig diff at the end
 
 
@@ -827,7 +827,6 @@ MSL_trees_dc_sp_sum <- Rmisc::summarySE(MSL_trees_dc_sp,
 MSL_trees_dc_sp_sum <- data.table(MSL_trees_dc_sp_sum)
 
 sp_incl <- c("Cw","Sx","Ba", "Pl")
-sp_incl <- c("Hw")
 
 ggplot()+
   geom_point(aes(x = BAHa_pred, y = BAHa_obs, group = as.factor(Unit), 
@@ -849,8 +848,8 @@ ggplot()+
     fill = "Treatment",
     shape = "Treatment"
   ) +
-  xlim(c(0,75))+
-  ylim(c(0,75))+
+  xlim(c(0,40))+
+  ylim(c(0,40))+
   theme(legend.position = "bottom")+
   guides(color = guide_legend(title.position = "top", title.hjust = 0.5, order = 1),  # Treatment legend first
          shape = guide_legend(title.position = "top", title.hjust = 0.5, order = 2)) +  # Species legend second
@@ -1145,4 +1144,36 @@ multcomp::cld(emt,  alpha=.05, Letters=letters)
 
 emt <- emtrends(model1, tukey ~ Treatment| Species, var = "TSH")
 multcomp::cld(emt,  alpha=.05, Letters=letters)
+
+
+#just modelled - all 100 years
+MSL_trees_dc[,`:=`(Unit = as.factor(Unit),
+                    TSH = Year - 1992)]
+MSL_trees_dc_sp[,`:=`(Unit = as.factor(Unit),
+                      TSH = Year - 1992)]
+dat_dc <- MSL_trees_dc[TSH > 0]
+
+model1 <- lm(MgHa ~ Treatment * Species * TSH, dat_dc)
+anova(model1)
+
+contrast(emmeans(model1, ~ Treatment|Species), method = "tukey")
+contrast(emmeans(model1, ~ Species | TSH), method = "tukey")
+
+#at 100 years - what is the difference in carbon in treatments
+summary(lm(MgHa ~ Treatment-1, dat_dc[Year == 2092]))
+anova(lm(MgHa ~ Treatment-1, dat_dc[Year == 2092]))
+
+ggplot()+
+  geom_boxplot(aes(y = val_ha, x =treatment, fill = Treatment), 
+               data = MSL_trees_sl[Year == 2091])
+ggplot()+
+  geom_boxplot(aes(y = val_ha, x =treatment, fill = Treatment), 
+               data = MSL_trees_sl[Year == 2051])
+ggplot()+
+  geom_boxplot(aes(y = val_ha, x =treatment, fill = Treatment), 
+               data = MSL_trees_sl[Year == 1992])
+# after 100 years, the carbon in the no/light treatment remains significantly
+# higher than med & heavy treatments, but the heavy and medium treatments are
+# no longer significantly different? 
+# looks like at about 50 years, the medium and heavy harvests merge
 
