@@ -199,3 +199,122 @@ SnagTime <- dc_out_as[UniqXY %in% fallIDs & state_type == "SnFallNext",
 
 
 
+ggplot(dc_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = as.character(Treatment)))+
+  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = as.character(Treatment)),size=1.5)+
+  theme_minimal()+
+  ylab("Snag Recruitment (adults - snags) Rate (%)")+
+  ylim(c(0,100))
+#ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagRecruitRate_newCM.jpg")
+ggplot(sl_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = as.character(Treatment)))+
+  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = as.character(Treatment)),size=1.5)+
+  theme_minimal()+
+  ylab("Snag Recruitment (adults - snags) Rate (%)")+
+  ylim(c(0,100))
+#which trees are dying
+ggplot(sl_ad_sn_sp)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Treatment))+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
+  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = Treatment),
+              method = "lm")+
+  theme_minimal()+
+  facet_wrap("Species")+
+  ylab("Snag Recruitment (adults - snags) Rate (%)")
+
+
+ggplot(sl_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=4)+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
+  geom_smooth(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5,
+              method = "lm")+
+  theme_minimal()+
+  ylab("Snag Fall Rate (snags - snag fall) (%)")
+#ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagFallRate_newSnagDyn.jpg")
+
+ggplot(sl_ad_sn[timestep<30])+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=4)+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
+  geom_smooth(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5,
+              method = "lm")+
+  theme_minimal()+
+  ylab("Snag Fall Rate (snags - snag fall) (%)")
+
+ggplot(sl_ad_sn_sp)+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = Species),size=4)+
+  #geom_smooth(aes(x = timestep, y = SnagFallRate))+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Species),size=0.5)+
+  scale_colour_manual(values = RColorBrewer::brewer.pal(4, "Set3"))+
+  theme_minimal()+
+  ylab("Snag Fall Rate (snags - snag fall) Rate (%)")+
+  facet_wrap("Treatment")
+
+ggplot()+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=2, data = dc_ad_sn)+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=1, data = dc_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=2, data = sl_ad_sn)+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = as.character(Unit)),size=1, data = sl_ad_sn)+
+  geom_smooth(aes(x = timestep, y = SnagFallRate),size=2, colour = "red", data = dc_ad_sn)+
+  geom_smooth(aes(x = timestep, y = SnagFallRate),size=2, colour = "blue", data = sl_ad_sn)+
+  theme_minimal()+
+  ylab("Snag Fall Rate (snags - snag fall) Rate (%)")
+
+
+ggplot(sl_snag_time)+
+  geom_boxplot(aes(y = Unit, x = TimeAsSnag, fill = Unit))+
+  theme_minimal()+
+  ylab("Number of years standing as snag")+
+  facet_wrap("Species")
+ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagLongevity.jpg")
+
+ggplot(sl_snag_time)+
+  geom_boxplot(aes(y = as.character(Species), x = TimeAsSnag, fill =Species))+
+  theme_minimal()+
+  ylab("Number of years standing as snag")
+facet_wrap("Species")
+ggsave("D:/Github/sortie_carbonExtensionNote/Outputs/Figures/SnagLongevity.jpg")
+
+
+#from SORTIE parameters: 
+# tree fall probability (never becomes a snag)
+#which trees are dying
+ggplot(dc_ad_sn_sp)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Treatment))+
+  #geom_line(aes(x = timestep, y = SnagFallRate, colour = Treatment),size=1.5)+
+  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = Treatment),
+              method = "lm")+
+  theme_minimal()+
+  facet_wrap("Species")+
+  ylab("Snag Recruitment (adults - snags) Rate (%)")
+
+ggplot(dc_ad_sn_sp)+
+  geom_point(aes(y = SnagFallRate, x = timestep, 
+                 colour = Treatment))+
+  geom_smooth(aes(y = SnagFallRate, x = timestep, 
+                  colour = Treatment))+
+  facet_wrap(~Species)+
+  theme_minimal()+
+  ylab("Number of years standing as snag")+
+  theme_set(theme_minimal(base_family = "Arial") +  # Change "Arial" to your desired font
+              theme(text = element_text(family = "Arial"),  # Change "Arial" to your desired font
+                    plot.title = element_text(size = 14, face = "bold"),
+                    axis.title = element_text(size = 14, face = "bold"),
+                    axis.text = element_text(size = 14, face = "bold"),
+                    legend.text = element_text(size = 14, face = "bold"),
+                    strip.text = element_text(size = 14, face = "bold"),
+                    legend.title = element_text(size = 14, face = "bold")
+              ))+
+  scale_fill_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  )+
+  scale_color_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  )
+
+#Check against the snag run:
+unique(NH_tr[Type=="Adult"]$Dead.Code) # no adults were assigned a dead code of natural (or harvest)
+

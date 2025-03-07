@@ -7,8 +7,9 @@ library(data.table)
 
 loc_path <- "./Inputs/SORTIEruns/SummitLake/" 
 My_newxmlPath <- paste0(loc_path,"ParameterFiles/") 
-files2run <- list.files(My_newxmlPath,"logProps.xml", full.names = TRUE)
-files2run <- list.files(My_newxmlPath,"ds_part.xml", full.names = TRUE)
+files2run <- list.files(in_dir,"6-logProps.xml", full.names = TRUE)
+
+updateNumYears(files2run, 100)
 
 runSortiePar(files2run, numcores = length(files2run), sortie_loc = 0)
 

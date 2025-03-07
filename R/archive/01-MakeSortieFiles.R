@@ -2,7 +2,7 @@ library(rsortie)
 library(data.table)
 #SBS---------------------------------------------------------------------------
 
-loc_path <- "./Inputs/SORTIEruns/SummitLake/" 
+loc_path <- "./02_init_sortie/02_summit_lake/" 
 My_basePath <- paste0(loc_path,"ParameterFiles/BaseFiles/") 
 My_newxmlPath <- paste0(loc_path,"ParameterFiles/") 
 My_newvalsPath <- paste0(loc_path,"ParameterValues/") 
@@ -136,7 +136,7 @@ updateNumYears(files2run, 100)
 #ICH---------------------------------------------------------------------------
 
 
-loc_path <- "D:/GitHub/SORTIEparams/Inputs/ICH/Snags/" 
+loc_path <- "./02_init_sortie/01_date_creek/" 
 My_basePath <- paste0(loc_path,"ParameterFiles/BaseFiles/") 
 My_newxmlPath <- paste0(loc_path,"ParameterFiles/") 
 My_newvalsPath <- paste0(loc_path,"ParameterValues/") 
@@ -162,9 +162,10 @@ for(tt in 1:length(TreatType)){
 Units_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/UnitBoundaries/"
 Gaps_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/GapCutsDateCreek/"
 
-AddHarvestWbrush(NewxmlPath = My_newxmlPath, Units_path = Units_path, Gaps_path = Gaps_path,
-                 ParamFile_Suffix= "-sn_d_init.xml")
+file_names <- list.files(My_newxmlPath, pattern = ".xml")
 
+DateCreekData::apply_harvest(NewxmlPath = My_newxmlPath, Units_path = Units_path, 
+                             Gaps_path = Gaps_path, file_names = file_names)
 
 
 #3. Update detailed substrate (by unit) -------------------------------------------
