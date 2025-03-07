@@ -27,8 +27,8 @@ setnames(FS_cwd_sl_dc_sg, "Decay","DecayClass")
 setkey(FS_cwd_sl,Unit)
 setkey(MS_cwd_sl,Unit)
 
-MS_cwd_sl[, Year:= timestep+1992]
-FS_cwd_sl
+#MS_cwd_sl[, Year:= timestep+1992]
+#FS_cwd_sl
 
 MF_cwd_sl <- merge(FS_cwd_sl, MS_cwd_sl, by = c("Unit","treatment","Year"),
                       all.x = TRUE)
@@ -85,8 +85,11 @@ ggplot()+
     shape = "Treatment"
   ) +
   xlim(c(0,30))+
-  ylim(c(0,30))
-ggsave(filename = "SBS_cwd_fit.png",
+  ylim(c(0,30))+
+  theme(legend.position = "bottom")+
+  guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
+  guides(color = guide_legend(override.aes = list(size = 5)))
+ggsave(filename = "SBS_cwd_fit.png",width = 7.91, height = 5.61,
        path = file.path(out_path), device='png', dpi=1200)
 
 
@@ -143,7 +146,7 @@ ggplot(NULL,
   guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
   guides(color = guide_legend(override.aes = list(size = 5)))
 
-ggsave(filename = "SBS_cwd_time.jpg",
+ggsave(filename = "SBS_cwd_time.jpg",width = 7.91, height = 5.61,
        path = file.path(out_path), device='jpeg', dpi=1000)
 
 
@@ -239,6 +242,62 @@ MF_trees_sl_sp_m <- melt(MF_trees_sl_sp,
                          value.name = "MgHa")
 MF_trees_sl_sp_m[, Type := ifelse(Type == "MgHa_obs", "obs", "pred")]
 
+
+
+years <- c(2020, "All Years")
+
+results <- lapply(years, function(year) {
+  data <- select_years(year,meas_obs = MgHa_obs, meas_pred = MgHa_pred,
+                       data = MF_cwd_sl)
+  sapply(stat_functions, function(f) f(data))
+})
+results_df <- do.call(rbind, results)
+results_df <- data.frame(Year = years, results_df)
+results_df
+
+t.test(MF_cwd_sl[Year == 2020]$MgHa_obs,
+       MF_cwd_sl[Year == 2020]$MgHa_pred)
+
+tost(x = MF_cwd_sl[Year == 2020]$MgHa_obs, 
+     y = MF_cwd_sl[Year == 2020]$MgHa_pred,
+     epsilon = 0.7,
+     paired = FALSE,
+     conf.level = 0.95) # 10% of the mean observed
+
+MFD_trees_summary <- MF_cwd_sl %>%
+  group_by(Year) %>%
+  summarise(
+    MgHa_obs_mean = mean(MgHa_obs, na.rm = TRUE),
+    MgHa_obs_sd   = sd(MgHa_obs, na.rm = TRUE),
+    MgHa_pred_mean = mean(MgHa_pred, na.rm = TRUE),
+    MgHa_pred_sd   = sd(MgHa_pred, na.rm = TRUE)
+  )
+
+# Define the equivalence bounds as percentages of the mean observed value
+equivalence_bounds <- c(0.05, 0.10, 0.15, 0.17, 0.2, 0.25, 0.3,
+                        0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
+
+# Subset data for the specific year
+yr_subset <- MF_cwd_sl[Year == 2020, ]
+
+# Calculate the mean of observed values for the species
+mean_obs <- mean(yr_subset$MgHa_obs)
+
+# Loop through each equivalence bound and calculate the TOST p-value
+results_table <- data.table(
+  Bound_Percentage = equivalence_bounds,
+  Bound_Value = equivalence_bounds * mean_obs,
+  TOST_p_value = sapply(equivalence_bounds, function(bound) {
+    tost_result <- equi_result(
+      yr_subset$MgHa_obs,
+      yr_subset$MgHa_pred,
+      mean_obs * bound
+    )
+    round(tost_result$tost.p.value, 2)
+  })
+)
+
+results_table
 #ICH -------------------------------------------------------------------------------
 #Date Creek
 MS_cwd_dc <- readRDS(file.path(in_path,"MS_cwd_dc.RDS"))
@@ -277,9 +336,9 @@ ggplot()+
   xlim(c(0,50))+
   ylim(c(0,50))+
   theme(legend.position = "bottom")+
-  guides(color = guide_legend(title.position = "top", title.hjust = 0.5, order = 1),  # Treatment legend first
-         shape = guide_legend(title.position = "top", title.hjust = 0.5, order = 2)) +  # Species legend second
-  guides(color = guide_legend(override.aes = list(size = 5))) 
+  guides(color = guide_legend(title.position = "top", title.hjust = 0.5),
+         width = 7.91, height = 5.61)+
+  guides(color = guide_legend(override.aes = list(size = 5)))
 
  ggsave(filename = "ICH_cwd_fit.png",
        path = file.path(out_path), device='png', dpi=1200)
@@ -350,6 +409,7 @@ ggplot(NULL,
     fill = "Treatment",
     shape = "Treatment"
   ) +
+  
   geom_ribbon(
     data = MS_cwd_dc_sum,
     aes(ymin = MgHa - ci, ymax = MgHa + ci),
@@ -499,8 +559,60 @@ ggplot(NULL,
     linetype = guide_legend(override.aes = list(size = 5))) 
 
 
+years <- c(1992, 1993, 2011, 2019, "All Years")
 
+results <- lapply(years, function(year) {
+  data <- select_years(year,meas_obs = MgHa_obs, meas_pred = MgHa_pred,
+                       data = MF_cwd_dc)
+  sapply(stat_functions, function(f) f(data))
+})
+results_df <- do.call(rbind, results)
+results_df <- data.frame(Year = years, results_df)
+results_df
 
+t.test(MF_cwd_dc[Year == 2019]$MgHa_obs,
+       MF_cwd_dc[Year == 2019]$MgHa_pred)
+
+tost(x = MF_cwd_dc[Year == 2019]$MgHa_obs, 
+     y = MF_cwd_dc[Year == 2019]$MgHa_pred,
+     epsilon = 0.18,
+     paired = FALSE,
+     conf.level = 0.95) # 10% of the mean observed
+
+MFD_cwd_summary <- MF_cwd_dc %>%
+  group_by(Year) %>%
+  summarise(
+    MgHa_obs_mean = mean(MgHa_obs, na.rm = TRUE),
+    MgHa_obs_sd   = sd(MgHa_obs, na.rm = TRUE),
+    MgHa_pred_mean = mean(MgHa_pred, na.rm = TRUE),
+    MgHa_pred_sd   = sd(MgHa_pred, na.rm = TRUE)
+  )
+
+# Define the equivalence bounds as percentages of the mean observed value
+equivalence_bounds <- c(0.05, 0.10, 0.15, 0.17, 0.2, 0.25, 0.3,
+                        0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
+
+# Subset data for the specific year
+yr_subset <- MF_cwd_dc[Year == 2019, ]
+
+# Calculate the mean of observed values for the species
+mean_obs <- mean(yr_subset$MgHa_obs)
+
+# Loop through each equivalence bound and calculate the TOST p-value
+results_table <- data.table(
+  Bound_Percentage = equivalence_bounds,
+  Bound_Value = equivalence_bounds * mean_obs,
+  TOST_p_value = sapply(equivalence_bounds, function(bound) {
+    tost_result <- equi_result(
+      yr_subset$MgHa_obs,
+      yr_subset$MgHa_pred,
+      mean_obs * bound
+    )
+    round(tost_result$tost.p.value, 2)
+  })
+)
+
+results_table
 
 
 

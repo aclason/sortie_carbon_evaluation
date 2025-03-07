@@ -38,6 +38,7 @@ MF_trees_sl_sp <- merge(FSL_trees_sl_sp, MSL_trees_sl_sp,
                      all.x = TRUE)
 setnames(MF_trees_sl_sp, c("MgHa.x","MgHa.y","BaHa.x","BaHa.y"), 
          c("MgHa_obs","MgHa_pred","BaHa_obs","BaHa_pred"))
+MF_trees_sl_sp[is.na(MgHa_pred), MgHa_pred := 0]
 
 MF_trees_sl_m <- melt(MFL_trees_sl, 
                          id.vars = c("Unit", "Treatment", "Year", "State"),
@@ -54,70 +55,6 @@ MF_trees_sl_sp_m <- melt(MF_trees_sl_sp,
 MF_trees_sl_sp_m[, obs_preds := ifelse(Type == "MgHa_obs" | Type == "BaHa_obs", "obs", "pred")]
 MF_trees_sl_sp_m[, val_type := tstrsplit(Type, "_", fixed = TRUE)[[1]]]
 
-t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Bl"]$val_ha,
-       MF_trees_sl_sp_m[obs_preds == "pred" & val_type == "MgHa" & Species == "Bl"]$val_ha)
-#Bl not sig diff
-t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Sx"]$val_ha,
-       MF_trees_sl_sp_m[obs_preds == "pred" & val_type == "MgHa" & Species == "Sx"]$val_ha)
-#Sx not sig diff
-t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Bl" & Year < 1997]$val_ha,
-       MF_trees_sl_sp_m[obs_preds == "pred" & val_type == "MgHa" & Species == "Bl" & Year < 1997]$val_ha)
-#Bl not sig diff at the start
-t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Sx"& Year < 1997]$val_ha,
-       MF_trees_sl_sp_m[obs_preds == "pred" & val_type == "MgHa" & Species == "Sx"& Year < 1997]$val_ha)
-#Sx not sig diff at the start
-
-t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Bl" & Year == 28]$val_ha,
-       MF_trees_sl_sp_m[obs_preds == "pred" & val_type == "MgHa" & Species == "Bl" & Year == 28]$val_ha)
-#Bl not sig diff at the end - but trending towards significance
-t.test(MF_trees_sl_sp_m[obs_preds == "obs" & val_type == "MgHa" & Species == "Sx"& Year == 28]$val_ha,
-       MF_trees_sl_sp_m[obs_preds == "pred" & val_type == "MgHa" & Species == "Sx"& Year == 28]$val_ha)
-#Sx not sig diff at the end
-
-
-ggplot()+
-  geom_line(aes(x = Year, y = MgHa, group = as.factor(Unit), color = Treatment), 
-            data = MSL_trees_sl[Year < 2021])+
-  geom_abline(slope = 0, intercept = 56.7754, linetype = "dashed", color = "grey")+
-  geom_point(aes(x = Year, y = MgHa, color = Treatment), 
-             data = FSL_trees_sl)
-
-ggplot()+
-  geom_line(aes(x = Year, y = MgHa, group = as.factor(Unit), color = as.factor(Unit)), 
-            data = MSL_trees_sl[Year < 2021])+
-  geom_abline(slope = 0, intercept = 56.7754, linetype = "dashed", color = "grey")+
-  geom_point(aes(x = Year, y = MgHa, color = as.factor(Unit)), 
-             data = FSL_trees_sl)+
-  facet_wrap(~Treatment)
-
-# Carbon predicted vs observed 
-ggplot()+
-  geom_point(aes(x = MgHa_pred, y = MgHa_obs, group = as.factor(Unit), 
-                 color = Treatment), 
-             alpha = 0.9,
-             size = 2,
-            data = MFL_trees_sl)+
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey")+
-  scale_color_manual(
-    values = c("#6C4191", "#66BBBB", "#DD4444"),
-    breaks = c("light/no", "med", "heavy"),
-    labels = c("High retention", "Medium retention", "Low retention")
-  ) +
-  coord_cartesian() +
-  labs(
-    x = "Carbon (Mg/ha) predicted",
-    y = "Carbon (Mg/ha) observed",
-    col = NULL,
-    fill = "Treatment",
-    shape = "Treatment"
-  ) +
-  xlim(c(0,125))+
-  ylim(c(0,125))+
-  theme(legend.position = "bottom")+
-  guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
-  guides(color = guide_legend(override.aes = list(size = 5)))
-ggsave(filename = "SBS_live_fit_mg.png",plot = last_plot(), width = 7.91, height = 5.61,
-       units = "in", path = file.path(out_path), device='png', dpi=1200)
 
 ggplot()+
   geom_point(aes(x = MgHa_pred, y = MgHa_obs, group = as.factor(Unit), 
@@ -133,8 +70,8 @@ ggplot()+
   ) +
   coord_cartesian() +
   labs(
-    x = "Carbon (Mg/ha) predicted",
-    y = "Carbon (Mg/ha) observed",
+    x = "Live carbon (Mg/ha) predicted",
+    y = "Live carbon (Mg/ha) observed",
     col = NULL,
     fill = "Treatment",
     shape = "Treatment"
@@ -145,13 +82,14 @@ ggplot()+
   guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
   guides(color = guide_legend(override.aes = list(size = 5)))+
   facet_wrap(~Year)
-ggsave(filename = "SBS_live_fit_yr_measHt.png",plot = last_plot(), width = 7.91, height = 5.61,
+ggsave(filename = "SBS_live_fit_yr.png",plot = last_plot(), width = 7.91, height = 5.61,
        units = "in", path = file.path(out_path, "Supplementary"), device='png', dpi=1200)
 
 
 MSL_trees_sl_sum <- Rmisc::summarySE(data = MSL_trees_sl, 
                                      measurevar = "MgHa", 
                                      groupvars = c("Treatment","Year"))
+MSL_trees_sl_sum <- MSL_trees_sl_sum[MSL_trees_sl_sum$Year < 2093,]
 FSL_trees_sl_sum <- Rmisc::summarySE(data = FSL_trees_sl, 
                                      measurevar = "MgHa", 
                                      groupvars = c("Treatment","Year"))
@@ -170,10 +108,10 @@ ggplot(NULL,
     breaks = c("light/no", "med", "heavy"),
     labels = c("High retention", "Medium retention", "Low retention")
   ) +
-  coord_cartesian(ylim = c(0, 120)) +
+  coord_cartesian(ylim = c(0, 160)) +
   labs(
     x = "Year",
-    y = "Carbon (Mg/ha)",
+    y = "Live carbon (Mg/ha)",
     col = "Treatment",
     fill = "Treatment",
     shape = "Treatment"
@@ -209,7 +147,7 @@ ggplot(NULL,
     breaks = c("light/no", "med", "heavy"),
     labels = c("High retention", "Medium retention", "Low retention")
   )+
-  xlim(c(1990, 2022))+
+  #xlim(c(1990, 2022))+
   theme(legend.position = "bottom")+
   guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
   guides(color = guide_legend(override.aes = list(size = 5)))
@@ -232,8 +170,8 @@ ggplot()+
   facet_grid(c("Species","Treatment"))
 
 
-MSL_trees_sl_sp_sum <- Rmisc::summarySE(MSL_trees_sl_sp[Species == "Bl" & Year < 2024|
-                                                          Species == "Sx" & Year < 2024],
+MSL_trees_sl_sp_sum <- Rmisc::summarySE(MSL_trees_sl_sp[Species == "Bl" |
+                                                          Species == "Sx" ],
                                         measurevar = "MgHa", 
                                         groupvars = c("Treatment","Year", "Species"))
                                         
@@ -284,119 +222,32 @@ ggplot(NULL,
     size = 1 ,
     position = position_dodge(width = 0.5)
   )+
-  geom_line(
-    data = MSL_trees_sl_sp[Species == "Bl"|Species == "Sx"],
-    aes(group = Unit, color = Treatment),
-    alpha = 0.7,
-    linetype = "dotted"
+ # geom_line(
+  #  data = MSL_trees_sl_sp[Species == "Bl"|Species == "Sx"],
+  #  aes(group = Unit, color = Treatment),
+  #  alpha = 0.7,
+  #  linetype = "dotted"
     #color = "grey"
-  ) +
+  #) +
   scale_shape_manual(
     values = c(24, 23, 21),
     breaks = c("light/no", "med", "heavy"),
     labels = c("High retention", "Medium retention", "Low retention")
   ) +
-  geom_errorbar(
-    data = FSL_trees_sl_sp_sum,
-    aes(ymin = MgHa - ci, ymax = MgHa + ci),
-    position = position_dodge(width = 1)
-  )+
-  xlim(c(1990, 2022))+
+  #geom_errorbar(
+  #  data = FSL_trees_sl_sp_sum,
+  #  aes(ymin = MgHa - ci, ymax = MgHa + ci),
+  #  position = position_dodge(width = 1)
+  #)+
+  #xlim(c(1990, 2022))+
   theme(legend.position = "bottom")+
   guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
   guides(color = guide_legend(override.aes = list(size = 5)))
 
-ggsave(filename = "SBS_live_trees_sp.jpg",
+ggsave(filename = "SBS_live_trees_sp_yr.jpg",
        path = file.path(out_path), device='jpeg', dpi=1000)
 
-MSL_trees_sl_sp_sum <- Rmisc::summarySE(MSL_trees_sl_sp[Species == "Bl" & Year < 2022|
-                                                          Species == "Sx"& Year < 2022],
-                                        measurevar = "BaHa", 
-                                        groupvars = c("Treatment","Year", "Species"))
-MSL_trees_sl_sp_sum <- data.table(MSL_trees_sl_sp_sum)
 
-ggplot(NULL,
-       aes(x = Year, y = BaHa, fill = Treatment, group = Treatment)) +
-  geom_line(data = MSL_trees_sl_sp_sum[Species == "Bl"|Species == "Sx"], 
-            aes(col = Treatment), size = 1.8) +
-  #scale_x_continuous(breaks = seq(0, 28, by = 2), expand = expansion(mult = c(0, 0.05))) +
-  scale_colour_manual(
-    values = c("#6C4191", "#66BBBB", "#DD4444"),
-    breaks = c("light/no", "med", "heavy"),
-    labels = c("High retention", "Medium retention", "Low retention")
-  ) +
-  scale_fill_manual(
-    values = c("#6C4191", "#66BBBB", "#DD4444"),
-    breaks = c("light/no", "med", "heavy"),
-    labels = c("High retention", "Medium retention", "Low retention")
-  ) +
-  coord_cartesian(ylim = c(0, 50)) +
-  labs(
-    x = "Year",
-    y = "Carbon (Mg/ha)",
-    col = "Treatment",
-    fill = "Treatment",
-    shape = "Treatment",
-    linetype = "Treatment"
-  ) +
- # geom_ribbon(
-#    data = MSL_trees_sl_sp_sum[Species == "Bl"|Species == "Sx"],
- #   aes(ymin = MgHa - ci, ymax = MgHa + ci),
-#    alpha = 0.25,
- #   linetype = "solid",
-#    color = "grey"
-#  )+
-  facet_wrap(c("Species"), labeller = as_labeller(c("Bl" = "Fir",
-                                                    "Sx" = "Spruce")))+
-  #geom_point(
-  #  data = FSL_trees_sl_sp_sum,
-  #  aes(shape = Treatment),
-  #  size = 3,
-  #  position = position_dodge(width = 0.5)
-  #)+ 
-  geom_jitter(
-    data = FSL_trees_sl_sp[Species == "Bl"|Species == "Sx"],
-    aes(shape = Treatment),
-    size = 2 ,
-    position = position_dodge(width = 1)
-  )+
-  #geom_point(
-  #  data = MSL_trees_sl_sp[Species == "Bl" & Year < 2022|Species == "Sx"& Year < 2022],
-  #  aes(group = interaction(Species, Treatment), color = Treatment),
-  #  alpha = 0.1#,
-    #linetype = "dotted"
-    #color = "grey"
-  #) + 
-  geom_line(
-    data = MSL_trees_sl_sp[Species == "Bl" & Year < 2022|Species == "Sx"& Year < 2022],
-    aes(group = Unit, color = Treatment, linetype = Treatment),
-    alpha = 0.3,
-    size = 0.8
-    #color = "grey"
-  ) +
-  scale_shape_manual(
-    values = c(24, 23, 21),
-    breaks = c("light/no", "med", "heavy"),
-    labels = c("High retention", "Medium retention", "Low retention")
-  )+
-  scale_linetype_manual(
-    values = c("solid", "dashed", "dotted"),
-    breaks = c("light/no", "med", "heavy"),
-    labels = c("High retention", "Medium retention", "Low retention")
-  )+
-  theme(legend.position = "bottom")+
-  guides(
-    color = guide_legend(title.position = "top", title.hjust = 0.5, override.aes = list(size = 5)),
-    shape = guide_legend(override.aes = list(size = 5)),
-    linetype = guide_legend(override.aes = list(size = 5)))
-# +
-  #geom_errorbar(
-  #  data = FSL_trees_sl_sp_sum,
-  #  aes(ymin = MgUnit - ci, ymax = MgUnit + ci),
-  #  position = position_dodge(width = 1)
-  #) 
-ggsave(filename = "SBS_live_trees_sp_tr.jpg",
-       path = file.path(out_path), device='jpeg', dpi=1000)
 
 MSL_trees_sl_sum <- Rmisc::summarySE(data = MSL_trees_sl, 
                                      measurevar = "MgHa", 
@@ -465,7 +316,67 @@ ggplot(data = MF_trees_sl_m[val_type == "MgHa"]) +
     shape = guide_legend(override.aes = list(size = 5)),
     linetype = guide_legend(override.aes = list(size = 5)))
 
+MSL_trees_sl_sp_sum <- Rmisc::summarySE(MSL_trees_sl_sp,
+                                        measurevar = "MgHa", 
+                                        groupvars = c("Treatment","Year", "Species"))
+MSL_trees_sl_sp_sum <- data.table(MSL_trees_sl_sp_sum)
+
+
+sp_incl <- c("Sx","Bl")
+ggplot(NULL,
+       aes(x = Year, y = MgHa, fill = Treatment, group = Treatment)) +
+  geom_line(data = MSL_trees_sl_sp_sum[Species %in% sp_incl], 
+            aes(col = Treatment), size = 1.8) +
+  scale_colour_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  coord_cartesian(ylim = c(0, 120)) +
+  labs(
+    x = "Year",
+    y = "Live carbon (Mg/ha)",
+    col = "Treatment",
+    fill = "Treatment",
+    shape = "Treatment",
+    linetype = "Treatment"
+  ) +
+  facet_wrap(c("Species"), 
+             labeller = as_labeller(c("Bl" = "Subalpine fir",
+                                      "Sx" = "Hybrid spruce")))+
+  geom_jitter(
+    data = FSL_trees_sl_sp[Species %in% sp_incl],
+    aes(shape = Treatment),
+    size = 2 ,
+    position = position_dodge(width = 1)
+  )+
+  geom_line(
+    data = MSL_trees_sl_sp[Species %in% sp_incl],
+    aes(group = Unit, color = Treatment),
+    alpha = 0.3,
+    size = 0.8
+  ) +
+  scale_shape_manual(
+    values = c(24, 23, 21),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  )+
+  theme(legend.position = "bottom")+
+  guides(
+    color = guide_legend(title.position = "top", title.hjust = 0.5, override.aes = list(size = 5)),
+    shape = guide_legend(override.aes = list(size = 5)),
+    linetype = guide_legend(override.aes = list(size = 5)))
+ggsave(filename = "SBS_live_trees_sp_tr_bl_sx.jpg",
+       path = file.path(out_path), device='jpeg', dpi=1000)
+
+
 #Stats -------------------------------------------------------------------------
+#goodness of fit----------------------------------------------
 years <- c(1992, 1994, 1997, 2009, 2019, "All Years")
 
 results <- lapply(years, function(year) {
@@ -476,7 +387,19 @@ results <- lapply(years, function(year) {
 results_df <- do.call(rbind, results)
 results_df <- data.frame(Year = years, results_df)
 results_df
-res_m <- data.table(melt(results_df, id.vars = "Year"))
+MFL_trees_summary <- MFL_trees_sl %>%
+  group_by(Year) %>%
+  summarise(
+    MgHa_obs_mean = mean(MgHa_obs, na.rm = TRUE),
+    MgHa_obs_sd   = sd(MgHa_obs, na.rm = TRUE),
+    MgHa_pred_mean = mean(MgHa_pred, na.rm = TRUE),
+    MgHa_pred_sd   = sd(MgHa_pred, na.rm = TRUE)
+  )
+lm(MgHa_pred ~ MgHa_obs, data = MFL_trees_sl)
+t.test(MFL_trees_sl[Year == 2019]$MgHa_obs,
+       MFL_trees_sl[Year == 2019]$MgHa_pred)
+
+#res_m <- data.table(melt(results_df, id.vars = "Year"))
 #cohen d: positive value - actual is XX MgHa higher than predicted
 
 #ggplot()+
@@ -486,132 +409,183 @@ res_m <- data.table(melt(results_df, id.vars = "Year"))
 #  geom_point(aes(x = as.factor(Year), y = as.numeric(value), 
 #                group = as.factor(variable), color = variable, size =2), 
 #            data = res_m[Year == "All Years" & variable != "RMSE"])
-#sp <- c("Bl","Sx")
+sp <- c("Bl","Sx")
 
-#results <- lapply(sp, function(sp) {
-#  data <- select_sp(sp, data = MF_trees_sl_sp)
-#  sapply(stat_functions, function(f) f(data))
-#})
-#results_df <- do.call(rbind, results)
-#results_df <- data.frame(Species = sp, results_df)
-#results_df
+results <- lapply(sp, function(sp) {
+  data <- select_sp(sp, data = MF_trees_sl_sp)
+  sapply(stat_functions, function(f) f(data))
+})
+results_df <- do.call(rbind, results)
+results_df <- data.frame(Species = sp, results_df)
+results_df
 
-#ts <- c("light/no","med","heavy")
+t.test(MFL_trees_sl[Year == 2019]$MgHa_obs,
+       MFL_trees_sl[Year == 2019]$MgHa_pred)
+equi_result(MFL_trees_sl[Year == 2019]$MgHa_obs, 
+            MFL_trees_sl[Year == 2019]$MgHa_pred, 7.6) # 10% of the mean observed
 
-#results <- lapply(ts, function(ts) {
-#  data <- select_ts(ts, data = MF_trees_sl)
-#  sapply(stat_functions, function(f) f(data))
-#})
-#results_df <- do.call(rbind, results)
-#results_df <- data.frame(Species = ts, results_df)
-#results_df
+equivalence_bounds <- c(0.01,0.05, 0.10, 0.15, 0.18, 0.2, 0.25, 0.3,
+                        0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
+ # Subset data for the specific year
+  yr_subset <- MFL_trees_sl[Year == 2019, ]
+  
+  # Calculate the mean of observed values for the species
+  mean_obs <- mean(yr_subset$MgHa_obs)
+  
+  # Loop through each equivalence bound and calculate the TOST p-value
+  results_table <- data.table(
+    Bound_Percentage = equivalence_bounds,
+    Bound_Value = equivalence_bounds * mean_obs,
+    TOST_p_value = sapply(equivalence_bounds, function(bound) {
+      tost_result <- equi_result(
+        yr_subset$MgHa_obs,
+        yr_subset$MgHa_pred,
+        mean_obs * bound
+      )
+      round(tost_result$tost.p.value, 2)
+    })
+  )
 
-#ts <- c("light/no","med","heavy")
-#sp <- c("Bl","Sx")
-#years <- c(1992, 1994, 1997, 2009, 2019, "All Years")
+results_table
 
-#results <- lapply(years, function(ts, sp, years) {
-#  data <- select_all(ts, data = MF_trees_sl)
-#  sapply(stat_functions, function(f) f(data))
-#})
-#results_df <- do.call(rbind, results)
-#results_df <- data.frame(Species = ts, results_df)
-#results_df
 
-#is there a significant difference between predicted and observed by 2019?
-equi_result(FSL_trees_sl[Year == 2019]$MgHa, 
-            MSL_trees_sl[Year == 2019]$MgHa,
-            eq_margin = 0.5)
-#not rejected == they are not different
-mean(MSL_trees_sl[Year == 2019]$MgHa)
-sd(MSL_trees_sl[Year == 2019]$MgHa)
-mean(FSL_trees_sl[Year == 2019]$MgHa)
-sd(FSL_trees_sl[Year == 2019]$MgHa)
+#species - year combo
+sp <- c("Bl","Sx")
+years <- c(1992, 1994, 1997, 2009, 2019)
 
-equi_boot(actual = FSL_trees_sl[Year == 2019]$MgUnit, 
-          predicted = MSL_trees_sl[Year == 2019]$MgUnit,
-          n_bootstraps = 1000,
-          eq_margin = 0.5)
+select_sp_yr <- function(sp, year, data) {
+  obs <- data[data$Species == sp & data$Year == year, ]$MgHa_obs
+  pred <- data[data$Species == sp & data$Year == year, ]$MgHa_pred
+  n_value <- nrow(data[data$Species == sp, ])
+  list(obs = obs, pred = pred, n_value = n_value)
+}
 
-#MF_trees_sl_m[,`:=`(unit_f = as.factor(unit),
- #                   treatment = as.factor(treatment),
-#                    State = as.factor(State))]
-#str(MF_trees_sl_m)
-MF_trees_sl_m[,`:=`(Unit = as.factor(Unit),
-                       TSH = Year - 1991)]
-dat_sl <- MF_trees_sl_m[val_type == "MgHa"]
 
-model1 <- lmer(val_ha ~ obs_preds * Treatment * TSH + (1 | Unit), 
-               data = dat_sl)
+results <- do.call(rbind, lapply(sp, function(sp) {
+  data.frame(do.call(rbind, lapply(years, function(year) {
+    data <- select_sp_yr(sp, year, data = MF_trees_sl_sp)
+    stats <- sapply(stat_functions, function(f) f(data))
+    c(Species = sp, Year = year, stats)
+  })))
+}))
+numeric_columns <- colnames(results)[-which(colnames(results) %in% c("Species"))] # All except "Species"
+results[numeric_columns] <- lapply(results[numeric_columns], as.numeric)
 
-model2 <- lmer(val_ha ~ obs_preds * Treatment + TSH + (1 | Unit), 
-               data = dat_sl)
+MFL_trees_summary <- MF_trees_sl_sp %>%
+  group_by(Year, Species) %>%
+  summarise(
+    MgHa_obs_mean = mean(MgHa_obs, na.rm = TRUE),
+    MgHa_obs_sd   = sd(MgHa_obs, na.rm = TRUE),
+    MgHa_pred_mean = mean(MgHa_pred, na.rm = TRUE),
+    MgHa_pred_sd   = sd(MgHa_pred, na.rm = TRUE)
+  )
 
-model3 <- lmer(val_ha ~ Treatment * TSH + obs_preds + (1 | Unit), 
-               data = dat_sl)
+t.test(MF_trees_sl_sp[Year == 2019 & Species == "Bl"]$MgHa_obs,
+       MF_trees_sl_sp[Year == 2019 & Species == "Bl"]$MgHa_pred)
 
-model4 <- lmer(val_ha ~ obs_preds * TSH + Treatment  + (1 | Unit), 
-               data = dat_sl)
+t.test(MF_trees_sl_sp[Year == 2019 & Species == "Sx"]$MgHa_obs,
+       MF_trees_sl_sp[Year == 2019 & Species == "Sx"]$MgHa_pred)
 
-model5 <- lmer(val_ha ~ obs_preds + TSH + Treatment  + (1 | Unit),
-               data = dat_sl)
+equi_result(MF_trees_sl_sp[Year == 2019 & Species == "Bl"]$MgHa_obs, 
+            MF_trees_sl_sp[Year == 2019 & Species == "Bl"]$MgHa_pred, 5) # 10% of the mean observed
 
-#MgHa ~ Type * treatment * Species * TSH + (1 | unit)
-AIC(model1, model2, model3, model4, model5)
+equi_result(MF_trees_sl_sp[Year == 2019 & Species == "Sx"]$MgHa_obs, 
+            MF_trees_sl_sp[Year == 2019 & Species == "Sx"]$MgHa_pred, 2) # 10% of the mean observed
+
+
+species_list <- sp
+equivalence_bounds <- c(0.05, 0.10, 0.15, 0.18, 0.2, 0.25, 0.3,
+                        0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
+
+# Initialize a results table
+results_table <- data.table(
+  Species = character(),
+  Bound_Percentage = equivalence_bounds,
+  Bound_Value = equivalence_bounds * mean_sp_obs,
+  TOST_p_value = numeric(length(equivalence_bounds))
+)
+
+for (species in species_list) {
+  # Subset data for the specific year and species
+  sp_yr_subset <- MF_trees_sl_sp[Year == 2019 & Species == species, ]
+  
+  # Calculate the mean of observed values for the species
+  mean_sp_obs <- mean(sp_yr_subset$MgHa_obs)
+  
+  # Loop through each equivalence bound and calculate the TOST p-value
+  for (bound in equivalence_bounds) {
+    # Perform TOST
+    tost_result <- equi_result(
+      sp_yr_subset$MgHa_obs,
+      sp_yr_subset$MgHa_pred,
+      mean_sp_obs * bound
+    )
+    
+    # Append the results to the results table
+    results_table <- rbind(
+      results_table,
+      data.table(
+        Species = species,
+        Bound_Percentage = bound,
+        Bound_Value = mean_sp_obs * bound,
+        TOST_p_value = round(tost_result$tost.p.value,2)
+      ),
+      fill = TRUE
+    )
+  }
+}
+results_table
+
+
+# linear models for effects of modelled treatment over time ---------------------
+ggplot(MSL_trees_sl)+
+  geom_bar(aes(x = Treatment))
+  
+
+MSL_trees_sl
+MSL_trees_sl[,`:=`(Unit = as.factor(Unit),
+                       TSH = Year - 1992)]
+model1 <- lmer(MgHa ~ Treatment * TSH + (1 | Unit), 
+               data = MSL_trees_sl)
 anova(model1)
-contrast(emmeans(model1, ~ Treatment), method = "tukey")
-#contrast(emmeans(model6, ~ Species | TSH), method = "tukey")
+contrast(emmeans(model1, ~ Treatment | TSH), method = "tukey")
 
-# this estimates the slope effects and contrasts:
-emt <- emtrends(model1, tukey ~ obs_preds, var = "TSH")
-multcomp::cld(emt,  alpha=.05, Letters=letters)
+#when do they converge
+# Post-hoc comparisons at each year
+years_to_test <- unique(MSL_trees_sl$TSH)
+results <- data.frame(Year = numeric(), 
+                      heavy_no = numeric(),
+                      heavy_med = numeric(),
+                      light_med = numeric())
 
-emt <- emtrends(model1, tukey ~ Treatment, var = "TSH")
-multcomp::cld(emt,  alpha=.05, Letters=letters)
+for (yr in years_to_test) {
+  emmeans_res <- emmeans(model1, pairwise ~ Treatment | TSH, at = list(TSH = yr))
+  hn <- summary(emmeans_res$contrasts)$p.value[1]  #heavy vs light/no
+  hm <- summary(emmeans_res$contrasts)$p.value[2]  #heavy vs med
+  lmd <- summary(emmeans_res$contrasts)$p.value[3]  #light/no vs.med
+  results <- rbind(results, data.frame(Year = yr, heavy_no = hn,
+                                       heavy_med = hm,
+                                       light_med = lmd))
+}
+results_dt <- data.table(results)
+setkey(results_dt, Year)
+# Find the first year where p < 0.05
+heavy_light_diff <- results_dt[heavy_no < 0.05, min(Year)] #0
+heavy_med_diff <- results_dt[heavy_med < 0.05, min(Year)] #0
+light_med_diff <- results_dt[light_med < 0.05, min(Year)] #0
+
+# Find the first year where p >= 0.05
+heavy_light_same <- results_dt[heavy_no >= 0.05, min(Year)] #
+heavy_med_same <- results_dt[heavy_med >= 0.05, min(Year)] #
+light_med_same <- results_dt[light_med >= 0.05, min(Year)] #
+
+
 
 ### Including species
-
 MF_trees_sl_sp_m[,`:=`(Unit = as.factor(Unit),
                        TSH = Year - 1991)]
 str(MF_trees_sl_sp_m)
-dat_sl <- MF_trees_sl_sp_m[Species == "Bl" |Species == "Sx"][val_type == "MgHa"]
 
-model1 <- lmer(val_ha ~ obs_preds * Treatment * Species * TSH + (1 | Unit), 
-               data = dat_sl)
-
-model2 <- lmer(val_ha ~ obs_preds * Treatment * Species + TSH + (1 | Unit), 
-               data = dat_sl)
-
-model3 <- lmer(val_ha ~ obs_preds * Treatment * TSH + Species + (1 | Unit), 
-               data = dat_sl)
-
-model4 <- lmer(val_ha ~ obs_preds * Species * TSH + Treatment + (1 | Unit), 
-               data = dat_sl)
-
-model5 <- lmer(val_ha ~ Treatment * Species * TSH + obs_preds + (1 | Unit), 
-               data = dat_sl)
-
-model6 <- lmer(val_ha ~ obs_preds * Treatment + Species * TSH + (1 | Unit), 
-               data = dat_sl)
-
-model7 <- lmer(val_ha ~ obs_preds * Species + Treatment * TSH + (1 | Unit), 
-               data = dat_sl)
-
-model8 <- lmer(val_ha ~ obs_preds * TSH + Treatment * Species + (1 | Unit), 
-               data = dat_sl)
-
-model9 <- lmer(val_ha ~ obs_preds + TSH + Treatment * Species + (1 | Unit),
-               data = dat_sl)
-
-model10 <- lmer(val_ha ~ Treatment + TSH + obs_preds * Species + (1 | Unit), 
-               data = dat_sl)
-
-model11 <- lmer(val_ha ~ Species + TSH + obs_preds * Treatment + (1 | Unit), 
-               data = dat_sl)
-
-#MgHa ~ Type * treatment * Species * TSH + (1 | unit)
-AIC(model1, model2, model3, model4, model5, model6, model7, model8, model9, model10, 
-    model11)
 anova(model1)
 contrast(emmeans(model1, ~ Treatment), method = "tukey")
 contrast(emmeans(model6, ~ Species | TSH), method = "tukey")
@@ -666,13 +640,6 @@ FSL_trees_dc <- readRDS(file.path(in_path,"FSL_trees_dc.RDS"))
 MSL_trees_dc_sp <- readRDS(file.path(in_path,"MSL_trees_dc_sp.RDS"))
 FSL_trees_dc_sp <- readRDS(file.path(in_path,"FSL_trees_dc_sp.RDS"))
 
-ggplot()+
-  geom_line(aes(x = Year, y = MgHa, group = as.factor(Unit), color = Treatment), 
-            data = MSL_trees_dc)+
-  #geom_abline(slope = 0, intercept = 56.7754, linetype = "dashed", color = "grey")+
-  geom_point(aes(x = Year, y = MgHa, color = Treatment), 
-             data = FSL_trees_dc)
-
 MFL_trees_dc <- merge(FSL_trees_dc, MSL_trees_dc, by = c("Unit","Treatment","Year","State"),
                      all.x = TRUE)
 setnames(MFL_trees_dc, c("MgHa.x","MgHa.y", "BAHa.x", "BAHa.y"),
@@ -683,7 +650,7 @@ MF_trees_dc_sp <- merge(FSL_trees_dc_sp, MSL_trees_dc_sp,
                         all.x = TRUE)
 setnames(MF_trees_dc_sp, c("MgHa.x","MgHa.y", "BAHa", "BaHa"),
          c("MgHa_obs","MgHa_pred","BAHa_obs", "BAHa_pred"))
-
+MF_trees_dc_sp[is.na(MgHa_obs)]
 
 MF_trees_dc_m <- melt(MFL_trees_dc, 
                       id.vars = c("Unit", "Treatment", "Year", "State"),
@@ -703,72 +670,7 @@ MF_trees_dc_sp_m <- melt(MF_trees_dc_sp,
 MF_trees_dc_sp_m[, obs_preds := ifelse(Type == "MgHa_obs" | Type == "BaHa_obs", "obs", "pred")]
 MF_trees_dc_sp_m[, val_type := tstrsplit(Type, "_", fixed = TRUE)[[1]]]
 
-ggplot()+
-  geom_line(aes(x = Year, y = MgHa, group = as.factor(Unit), color = Treatment), 
-            data = MSL_trees_dc)+
-  #geom_abline(slope = 0, intercept = 56.7754, linetype = "dashed", color = "grey")+
-  geom_point(aes(x = Year, y = MgHa, color = Treatment), 
-             data = FSL_trees_dc)
-# Carbon predicted vs observed 
-ggplot()+
-  geom_point(aes(x = MgHa_pred, y = MgHa_obs, 
-                 color = Treatment), 
-             alpha = 0.9,
-             size = 2,
-             data = MFL_trees_dc)+
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey")+
-  scale_color_manual(
-    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
-    breaks = c("NH","LR", "HR", "CC"),
-    labels = c("No harvest","High retention", "Medium retention", "No retention")
-  ) +
-  coord_cartesian() +
-  labs(
-    x = "Carbon (Mg/ha) predicted",
-    y = "Carbon (Mg/ha) observed",
-    col = NULL,
-    fill = "Treatment",
-    shape = "Treatment"
-  ) +
-  xlim(c(0,275))+
-  ylim(c(0,275))+
-  theme(legend.position = "bottom")+
-  guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
-  guides(color = guide_legend(override.aes = list(size = 5)))#+
-  #facet_wrap(~Year)
-ggsave(filename = "ICH_live_fit.png",plot = last_plot(), width = 7.91, height = 5.61,
-       units = "in", path = file.path(out_path), device='png', dpi=1200)
-
-ggplot()+
-  geom_point(aes(x = BAHa_pred, y = BAHa_obs, group = as.factor(Unit), 
-                 color = Treatment), 
-             alpha = 0.9,
-             size = 2,
-             data = MFL_trees_dc)+
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey")+
-  scale_color_manual(
-    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
-    breaks = c("NH","LR", "HR", "CC"),
-    labels = c("No harvest","High retention", "Medium retention", "No retention")
-  ) +
-  coord_cartesian() +
-  labs(
-    x = "BA predicted",
-    y = "BA observed",
-    col = NULL,
-    fill = "Treatment",
-    shape = "Treatment"
-  ) +
-  xlim(c(0,100))+
-  ylim(c(0,100))+
-  theme(legend.position = "bottom")+
-  guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
-  guides(color = guide_legend(override.aes = list(size = 5)))+
-  facet_wrap(~Year)
-ggsave(filename = "ICH_live_BA_by_year.png",
-       path = file.path(out_path, "Supplementary"), device='png', dpi=1200)
-
-
+## Figures -------------------------------------------
 
 ggplot()+
   geom_point(aes(x = MgHa_pred, y = MgHa_obs, group = as.factor(Unit), 
@@ -792,134 +694,13 @@ ggplot()+
   facet_wrap(~Year)+
   guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
   guides(color = guide_legend(override.aes = list(size = 5)))
-ggsave(filename = "ICH_live_fit_by_year.png",
+ggsave(filename = "ICH_live_fit_yr.png", width = 7.91, height = 5.61,
        path = file.path(out_path, "Supplementary"), device='png', dpi=1200)
 
-years <- c(1992, 1993, 2010, 2018, 2022, "All Years")
-
-results <- lapply(years, function(year) {
-  data <- select_years(year,meas_obs = MgHa_obs, meas_pred = MgHa_pred,
-                       data = MFL_trees_dc)
-  sapply(stat_functions, function(f) f(data))
-})
-results_df <- do.call(rbind, results)
-results_df <- data.frame(Year = years, results_df)
-results_df
-res_m <- data.table(melt(results_df, id.vars = "Year"))
-#is there a significant difference between predicted and observed by 2022?
-equi_result(FSL_trees_dc[Year == 2022]$MgHa, 
-            MSL_trees_dc[Year == 2022]$MgHa,
-            eq_margin = 10)
-
-t.test(FSL_trees_dc[Year == 2022]$MgHa, 
-            MSL_trees_dc[Year == 2022]$MgHa) #not diff
-
-#not rejected == they are not different
-mean(MSL_trees_dc[Year == 2022]$MgHa)
-sd(MSL_trees_dc[Year == 2022]$MgHa)
-mean(FSL_trees_dc[Year == 2022]$MgHa)
-sd(FSL_trees_dc[Year == 2022]$MgHa)
-
-#by species
 MSL_trees_dc_sp_sum <- Rmisc::summarySE(MSL_trees_dc_sp,
                                         measurevar = "MgHa", 
                                         groupvars = c("Treatment","Year", "Species"))
 MSL_trees_dc_sp_sum <- data.table(MSL_trees_dc_sp_sum)
-
-sp_incl <- c("Cw","Sx","Ba", "Pl")
-
-ggplot()+
-  geom_point(aes(x = BAHa_pred, y = BAHa_obs, group = as.factor(Unit), 
-                 color = Treatment), 
-             alpha = 0.9,
-             size = 2,
-             data = MF_trees_dc_sp[Species %in% sp_incl])+
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey")+
-  scale_color_manual(
-    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
-    breaks = c("NH","LR", "HR", "CC"),
-    labels = c("No harvest","High retention", "Medium retention", "No retention")
-  ) +
-  coord_cartesian() +
-  labs(
-    x = "BA predicted",
-    y = "BA observed",
-    col = NULL,
-    fill = "Treatment",
-    shape = "Treatment"
-  ) +
-  xlim(c(0,40))+
-  ylim(c(0,40))+
-  theme(legend.position = "bottom")+
-  guides(color = guide_legend(title.position = "top", title.hjust = 0.5, order = 1),  # Treatment legend first
-         shape = guide_legend(title.position = "top", title.hjust = 0.5, order = 2)) +  # Species legend second
-  guides(color = guide_legend(override.aes = list(size = 5)))+
-  facet_wrap(~Year)
-  #facet_grid(c("Species", "Year"))
-ggsave(filename = "ICH_live_BA_sp_tr_cw_sx_pl_Ba_grid.jpg",
-       path = file.path(out_path), device='jpeg', dpi=1200)
-
-sp_incl <- c("Hw")
-ggplot()+
-  geom_point(aes(x = BAHa_pred, y = BAHa_obs, group = as.factor(Unit), 
-                 color = Treatment), 
-             alpha = 0.9,
-             size = 2,
-             data = MF_trees_dc_sp[Species %in% sp_incl])+
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey")+
-  scale_color_manual(
-    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
-    breaks = c("NH","LR", "HR", "CC"),
-    labels = c("No harvest","High retention", "Medium retention", "No retention")
-  ) +
-  coord_cartesian() +
-  labs(
-    x = "BA predicted",
-    y = "BA observed",
-    col = NULL,
-    fill = "Treatment",
-    shape = "Treatment"
-  ) +
-  xlim(c(0,75))+
-  ylim(c(0,75))+
-  theme(legend.position = "bottom")+
-  guides(color = guide_legend(title.position = "top", title.hjust = 0.5, order = 1),  # Treatment legend first
-         shape = guide_legend(title.position = "top", title.hjust = 0.5, order = 2)) +  # Species legend second
-  guides(color = guide_legend(override.aes = list(size = 5)))+
-  facet_wrap(~Year)
-#facet_grid(c("Species", "Year"))
-ggsave(filename = "ICH_live_BA_sp_tr_hw_grid.jpg",
-       path = file.path(out_path), device='jpeg', dpi=1200)
-
-ggplot()+
-  geom_point(aes(x = MgHa_pred, y = MgHa_obs, group = as.factor(Unit), 
-                 color = Treatment), 
-             alpha = 0.9,
-             size = 2,
-             data = MF_trees_dc_sp[Species %in% sp_incl])+
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey")+
-  scale_color_manual(
-    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
-    breaks = c("NH","LR", "HR", "CC"),
-    labels = c("No harvest","High retention", "Medium retention", "No retention")
-  ) +
-  coord_cartesian() +
-  labs(
-    x = "Carbon (Mg/ha) predicted",
-    y = "Carbon (Mg/ha) observed",
-    col = NULL,
-    fill = "Treatment",
-    shape = "Treatment"
-  ) +
-  xlim(c(0,250))+
-  ylim(c(0,250))+
-  theme(legend.position = "bottom")+
-  guides(color = guide_legend(title.position = "top", title.hjust = 0.5, order = 1),  # Treatment legend first
-         shape = guide_legend(title.position = "top", title.hjust = 0.5, order = 2)) +  # Species legend second
-  guides(color = guide_legend(override.aes = list(size = 5)))+
-  facet_wrap(~Year)
-ggsave(filename = "ICH_live_FIT_sp_tr_hw.jpg",
-       path = file.path(out_path), device='jpeg', dpi=1200)
 
 
 sp_incl <- c("Cw","Sx","Ba", "Pl")
@@ -941,19 +722,19 @@ ggplot(NULL,
   coord_cartesian(ylim = c(0, 100)) +
   labs(
     x = "Year",
-    y = "Carbon (Mg/ha)",
+    y = "Live carbon (Mg/ha)",
     col = "Treatment",
     fill = "Treatment",
     shape = "Treatment",
     linetype = "Treatment"
   ) +
   facet_wrap(c("Species"), 
-            # labeller = as_labeller(c("Ba" = "Amabilis fir",
+             # labeller = as_labeller(c("Ba" = "Amabilis fir",
              #                         "Bl" = "Subalpine fir",
-              #                        "Sx" = "Hybrid spruce",
-               #                       "Pl" = "Lodgepole pine",
-                #                      "Cw" = "Western cedar",
-                 #                     "Hw" = "Western hemlock"))
+             #                        "Sx" = "Hybrid spruce",
+             #                       "Pl" = "Lodgepole pine",
+             #                      "Cw" = "Western cedar",
+             #                     "Hw" = "Western hemlock"))
              labeller = as_labeller(c("Ba" = "Amabilis fir",
                                       "Cw" = "Western cedar",
                                       "Pl" = "Lodgepole pine",
@@ -966,7 +747,7 @@ ggplot(NULL,
   )+
   geom_line(
     data = MSL_trees_dc_sp[Species %in% sp_incl],
-    aes(group = Unit, color = Treatment, linetype = Treatment),
+    aes(group = Unit, color = Treatment),
     alpha = 0.3,
     size = 0.8
   ) +
@@ -975,17 +756,17 @@ ggplot(NULL,
     breaks = c("NH","LR", "HR", "CC"),
     labels = c("No harvest","High retention", "Medium retention", "No retention")
   )+
-  scale_linetype_manual(
-    values = c("twodash","solid", "dashed", "dotted"),
-    breaks = c("NH","LR", "HR", "CC"),
-    labels = c("No harvest","High retention", "Medium retention", "No retention")
-  )+
+  #scale_linetype_manual(
+   # values = c("twodash","solid", "dashed", "dotted"),
+  #  breaks = c("NH","LR", "HR", "CC"),
+  #  labels = c("No harvest","High retention", "Medium retention", "No retention")
+  #)+
   theme(legend.position = "bottom")+
   guides(
     color = guide_legend(title.position = "top", title.hjust = 0.5, override.aes = list(size = 5)),
     shape = guide_legend(override.aes = list(size = 5)),
     linetype = guide_legend(override.aes = list(size = 5)))
-ggsave(filename = "ICH_live_trees_sp_tr_cw_sx_pl_Ba.jpg",
+ggsave(filename = "ICH_live_trees_sp_tr_cw_sx_pl_ba.jpg",
        path = file.path(out_path), device='jpeg', dpi=1000)
 
 sp_incl <- c("Hw")
@@ -1007,7 +788,7 @@ ggplot(NULL,
   coord_cartesian(ylim = c(0, 225)) +
   labs(
     x = "Year",
-    y = "Carbon (Mg/ha)",
+    y = "Live carbon (Mg/ha)",
     col = "Treatment",
     fill = "Treatment",
     shape = "Treatment",
@@ -1029,7 +810,7 @@ ggplot(NULL,
   )+
   geom_line(
     data = MSL_trees_dc_sp[Species %in% sp_incl],
-    aes(group = Unit, color = Treatment, linetype = Treatment),
+    aes(group = Unit, color = Treatment),
     alpha = 0.3,
     size = 0.8
   ) +
@@ -1051,99 +832,325 @@ ggplot(NULL,
 ggsave(filename = "ICH_live_trees_sp_tr_hw.jpg",
        path = file.path(out_path), device='jpeg', dpi=1000)
 
+MSL_trees_dc_sum <- Rmisc::summarySE(data = MSL_trees_dc, 
+                                     measurevar = "MgHa", 
+                                     groupvars = c("Year", "Treatment"))
 
-MF_trees_dc_m[,`:=`(Unit = as.factor(Unit),
-                    TSH = Year - 1992)]
-dat_dc <- MF_trees_dc_m[Measure == "MgHa"][TSH > 0]
+ggplot(NULL,
+       aes(x = Year, y = MgHa, fill = Treatment, group = Treatment)) +
+  geom_line(data = MSL_trees_dc_sum, aes(col = Treatment), size = 1.2) +
+  #scale_x_continuous(breaks = seq(0, 28, by = 2), expand = expansion(mult = c(0, 0.05))) +
+  scale_color_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  ) +
+  scale_fill_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  ) +
+  coord_cartesian(ylim = c(0, 250)) +
+  labs(
+    x = "Year",
+    y = "Live carbon (Mg/ha)",
+    col = "Treatment",
+    fill = "Treatment",
+    shape = "Treatment"
+  ) +
+  geom_ribbon(
+    data = MSL_trees_dc_sum,
+    aes(ymin = MgHa - ci, ymax = MgHa + ci),
+    alpha = 0.1,
+    linetype = "solid",
+    color = "grey"
+  ) +
+  #geom_point(
+  #  data = FSL_trees_sl_sum,
+  #  aes(shape = Treatment),
+  #  size = 5 ,
+  #  position = position_dodge(width = 3)
+  #) +
+  geom_point(
+    data = FSL_trees_dc,
+    aes(shape = Treatment),
+    size = 1 ,
+    position = position_dodge(width = 3)
+  )+
+  #geom_line(
+  #  data = MSL_trees_sl,
+  # aes(group = unit, color = treatment),
+  # alpha = 0.7,
+  # linetype = "dotted"
+  #color = "grey"
+  # ) +
+  scale_shape_manual(
+    values = c(24, 23, 21, 25),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  )+
+  theme(legend.position = "bottom")+
+  guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
+  guides(color = guide_legend(override.aes = list(size = 5)))
 
-model1 <- lmer(val_ha ~ Type * Treatment * TSH + (1 | Unit), 
-               data = dat_dc)
+ggsave(filename = "ICH_live_trees.jpg",
+       path = file.path(out_path), device='jpeg', dpi=1000)
 
-model2 <- lmer(val_ha ~ Type * Treatment + TSH + (1 | Unit), 
-               data = dat_dc)
+#Stats -------------------------------------------------
 
-model3 <- lmer(val_ha ~ Treatment * TSH + Type + (1 | Unit), 
-               data = dat_dc)
+# Goodness of fit
+years <- c(1992, 1993, 2010, 2018, 2022, "All Years")
 
-model4 <- lmer(val_ha ~ Type * TSH + Treatment  + (1 | Unit), 
-               data = dat_dc)
+results <- lapply(years, function(year) {
+  data <- select_years(year,meas_obs = MgHa_obs, meas_pred = MgHa_pred,
+                       data = MFL_trees_dc)
+  sapply(stat_functions, function(f) f(data))
+})
+results_df <- do.call(rbind, results)
+results_df <- data.frame(Year = years, results_df)
+results_df
+#is there a significant difference between predicted and observed by 2022?
+equi_result(MFL_trees_dc[Year == 2022]$MgHa_obs, 
+            MFL_trees_dc[Year == 2022]$MgHa_pred, 14) # 10% of the mean observed
+equi_boot(MFL_trees_dc$MgHa_obs,
+          MFL_trees_dc$MgHa_pred, n_bootstraps = 10000, eq_margin = 14)
+t.test(FSL_trees_dc[Year == 2022]$MgHa, 
+            MSL_trees_dc[Year == 2022]$MgHa) #not diff
+summary(lm(MgHa_pred ~ MgHa_obs, MFL_trees_dc))
 
-model5 <- lmer(val_ha ~ Type + TSH + Treatment  + (1 | Unit),
-               data = dat_dc)
+equivalence_bounds <- c(0.01,0.05, 0.10, 0.15, 0.18, 0.2, 0.25, 0.3,
+                        0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
+# Subset data for the specific year
+yr_subset <- MFL_trees_dc[Year == 2022, ]
 
-#MgHa ~ Type * treatment * Species * TSH + (1 | unit)
-AIC(model1, model2, model3, model4, model5)
-anova(model2)
+# Calculate the mean of observed values for the species
+mean_obs <- mean(yr_subset$MgHa_obs)
 
-contrast(emmeans(model2, ~ Type), method = "tukey")
+# Loop through each equivalence bound and calculate the TOST p-value
+results_table <- data.table(
+  Bound_Percentage = equivalence_bounds,
+  Bound_Value = equivalence_bounds * mean_obs,
+  TOST_p_value = sapply(equivalence_bounds, function(bound) {
+    tost_result <- equi_result(
+      yr_subset$MgHa_obs,
+      yr_subset$MgHa_pred,
+      mean_obs * bound
+    )
+    round(tost_result$tost.p.value, 2)
+  })
+)
 
-contrast(emmeans(model2, ~ Type | Treatment), method = "tukey")
+results_table
 
-# this estimates the slope effects and contrasts:
-emt <- emtrends(model1, tukey ~ Type, var = "TSH")
-multcomp::cld(emt,  alpha=.05, Letters=letters)
 
-emt <- emtrends(model1, tukey ~ Treatment, var = "TSH")
-multcomp::cld(emt,  alpha=.05, Letters=letters)
+MFL_trees_summary <- MFL_trees_dc %>%
+  group_by(Year) %>%
+  summarise(
+    MgHa_obs_mean = mean(MgHa_obs, na.rm = TRUE),
+    MgHa_obs_sd   = sd(MgHa_obs, na.rm = TRUE),
+    MgHa_pred_mean = mean(MgHa_pred, na.rm = TRUE),
+    MgHa_pred_sd   = sd(MgHa_pred, na.rm = TRUE)
+  ) %>% mutate(across(where(is.numeric), ~ format(., nsmall = 1)))
 
-#MF_trees_dc_m[,`:=`(unit_f = as.factor(unit),
-#                   treatment = as.factor(treatment),
-#                    State = as.factor(State))]
-#str(MF_trees_dc_m)
-MF_trees_dc_sp_m[,`:=`(Unit = as.factor(Unit),
-                       TSH = Year - 1992)]
-str(MF_trees_dc_sp_m)
-sp_incl <- c("Cw","Sx","Ba", "Pl","Hw")
+#by species
+#species - year combo
+sp <- c("Hw","Cw","Ba","Sx","Pl")
+years <- c(1992, 1993, 2010, 2018, 2022)
 
-dat_dc <- MF_trees_dc_sp_m[Species %in% sp_incl][val_type == "MgHa"][TSH > 0]
+select_sp_yr <- function(sp, year, data) {
+  obs <- data[data$Species == sp & data$Year == year, ]$MgHa_obs
+  pred <- data[data$Species == sp & data$Year == year, ]$MgHa_pred
+  n_value <- nrow(data[data$Species == sp, ])
+  list(obs = obs, pred = pred, n_value = n_value)
+}
 
-model1 <- lmer(val_ha ~ obs_preds * Treatment * Species * TSH + (1 | Unit), 
-               data = dat_dc)
 
-model2 <- lmer(val_ha ~ obs_preds * Treatment * Species + TSH + (1 | Unit), 
-               data = dat_dc)
+results <- do.call(rbind, lapply(sp, function(sp) {
+  data.frame(do.call(rbind, lapply(years, function(year) {
+    data <- select_sp_yr(sp, year, data = MF_trees_dc_sp)
+    stats <- sapply(stat_functions, function(f) f(data))
+    c(Species = sp, Year = year, stats)
+  })))
+}))
+numeric_columns <- colnames(results)[-which(colnames(results) %in% c("Species"))] # All except "Species"
+results[numeric_columns] <- lapply(results[numeric_columns], as.numeric)
 
-model3 <- lmer(val_ha ~ obs_preds * Treatment * TSH + Species + (1 | Unit), 
-               data = dat_dc)
+MFL_trees_summary <- MF_trees_dc_sp %>%
+  group_by(Year, Species) %>%
+  summarise(
+    MgHa_obs_mean = mean(MgHa_obs, na.rm = TRUE),
+    MgHa_obs_sd   = sd(MgHa_obs, na.rm = TRUE),
+    MgHa_pred_mean = mean(MgHa_pred, na.rm = TRUE),
+    MgHa_pred_sd   = sd(MgHa_pred, na.rm = TRUE)
+  )
+MFL_trees_summary <- MFL_trees_summary %>% filter(Species %in% sp)  %>% 
+  mutate(across(where(is.numeric), ~ format(., nsmall = 1)))
 
-model4 <- lmer(val_ha ~ obs_preds * Species * TSH + Treatment + (1 | Unit), 
-               data = dat_dc)
+t.test(MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$MgHa_obs,
+       MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$MgHa_pred)
 
-model5 <- lmer(val_ha ~ Treatment * Species * TSH + obs_preds + (1 | Unit), 
-               data = dat_dc)
+t.test(MF_trees_dc_sp[Year == 2022 & Species == "Cw"]$MgHa_obs,
+       MF_trees_dc_sp[Year == 2022 & Species == "Cw"]$MgHa_pred)
 
-model6 <- lmer(val_ha ~ obs_preds * Treatment + Species * TSH + (1 | Unit), 
-               data = dat_dc)
+t.test(MF_trees_dc_sp[Year == 2022 & Species == "Sx"]$MgHa_obs,
+       MF_trees_dc_sp[Year == 2022 & Species == "Sx"]$MgHa_pred)
 
-model7 <- lmer(val_ha ~ obs_preds * Species + Treatment * TSH + (1 | Unit), 
-               data = dat_dc)
+t.test(MF_trees_dc_sp[Year == 2022 & Species == "Pl"]$MgHa_obs,
+       MF_trees_dc_sp[Year == 2022 & Species == "Pl"]$MgHa_pred)
 
-model8 <- lmer(val_ha ~ obs_preds * TSH + Treatment * Species + (1 | Unit), 
-               data = dat_dc)
+t.test(MF_trees_dc_sp[Year == 2022 & Species == "Ba"]$MgHa_obs,
+       MF_trees_dc_sp[Year == 2022 & Species == "Ba"]$MgHa_pred)
 
-model9 <- lmer(val_ha ~ obs_preds + TSH + Treatment * Species + (1 | Unit),
-               data = dat_dc)
+#Hemlock
+equi_result(MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$MgHa_obs, 
+            MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$MgHa_pred, 9) # 10% of the mean observed
 
-model10 <- lmer(val_ha ~ Treatment + TSH + obs_preds * Species + (1 | Unit), 
-                data = dat_dc)
+equi_result(MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$MgHa_obs, 
+            MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$MgHa_pred, 
+            mean(MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$MgHa_obs)*0.05)
+equi_result(MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$MgHa_obs, 
+            MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$MgHa_pred, 
+            mean(MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$MgHa_obs)*0.1)
+equi_result(MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$MgHa_obs, 
+            MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$MgHa_pred, 
+            mean(MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$MgHa_obs)*0.15)
 
-model11 <- lmer(val_ha ~ Species + TSH + obs_preds * Treatment + (1 | Unit), 
-                data = dat_dc)
 
-#MgHa ~ Type * treatment * Species * TSH + (1 | unit)
-AIC(model1, model2, model3, model4, model5, model6, model7, model8, model9, model10, 
-    model11)
-anova(model2)
-contrast(emmeans(model2, ~ Treatment), method = "tukey")
-contrast(emmeans(model1, ~ Species), method = "tukey")
-contrast(emmeans(model2, ~ Treatment| Species | obs_preds), method = "tukey")
 
-# this estimates the slope effects and contrasts:
-emt <- emtrends(model1, tukey ~ Treatment| Species , var = "TSH")
-multcomp::cld(emt,  alpha=.05, Letters=letters)
+equi_result(MF_trees_dc_sp[Year == 2022 & Species == "Cw"]$MgHa_obs, 
+            MF_trees_dc_sp[Year == 2022 & Species == "Cw"]$MgHa_pred, 3) # 10% of the mean observed
 
-emt <- emtrends(model1, tukey ~ Treatment| Species, var = "TSH")
-multcomp::cld(emt,  alpha=.05, Letters=letters)
+
+equi_result(MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$MgHa_obs, 
+            MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$MgHa_pred, 9) # 10% of the mean observed
+
+equi_result(MF_trees_dc_sp[Year == 2022 & Species == "Cw"]$MgHa_obs, 
+            MF_trees_dc_sp[Year == 2022 & Species == "Cw"]$MgHa_pred, 3) # 10% of the mean observed
+
+species_list <- sp
+sp_yr_subset <- MF_trees_dc_sp[Year == 2022 & Species == "Hw", ]
+
+# Define the equivalence bounds as percentages of the mean observed value
+equivalence_bounds <- c(0.05, 0.10, 0.15, 0.17, 0.2, 0.25, 0.3,
+                        0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
+
+# Initialize a results table
+#results_table <- data.table(
+ # Species = character(),
+#  Bound_Percentage = equivalence_bounds,
+#  Bound_Value = equivalence_bounds * mean_sp_obs,
+#  TOST_p_value = numeric(length(equivalence_bounds))
+#)
+results <- c()
+for (species in species_list) {
+  # Subset data for the specific year and species
+  sp_yr_subset <- MF_trees_dc_sp[Year == 2022 & Species == species, ]
+  
+  # Calculate the mean of observed values for the species
+  mean_sp_obs <- mean(sp_yr_subset$MgHa_obs)
+  
+  # Loop through each equivalence bound and calculate the TOST p-value
+  for (bound in equivalence_bounds) {
+    # Perform TOST
+    tost_result <- equi_result(
+      sp_yr_subset$MgHa_obs,
+      sp_yr_subset$MgHa_pred,
+      mean_sp_obs * bound
+    )
+    
+    # Append the results to the results table
+    results_table <- rbind(
+      results_table,
+      data.table(
+        Species = species,
+        Bound_Percentage = bound,
+        Bound_Value = mean_sp_obs * bound,
+        TOST_p_value = round(tost_result$tost.p.value,2)
+      ),
+      fill = TRUE
+    )
+  }
+}
+results_table
+
+MFL_trees_summary <- MF_trees_dc_sp %>%
+  filter(Treatment == "CC" & Species == "Pl")%>%
+  group_by(Year, Species) %>%
+  summarise(
+    MgHa_obs_mean = mean(MgHa_obs, na.rm = TRUE),
+    MgHa_obs_sd   = sd(MgHa_obs, na.rm = TRUE),
+    MgHa_pred_mean = mean(MgHa_pred, na.rm = TRUE),
+    MgHa_pred_sd   = sd(MgHa_pred, na.rm = TRUE)
+  )%>% 
+  mutate(across(where(is.numeric), ~ format(., nsmall = 1)))
+
+t.test(MF_trees_dc_sp[Year == 2022 & Species == "Pl" & Treatment == "CC"]$MgHa_obs,
+       MF_trees_dc_sp[Year == 2022 & Species == "Pl" & Treatment == "CC"]$MgHa_pred)
+
+sp <- c("Pl")
+years <- c(1992, 1993, 2010, 2018, 2022)
+
+results <- do.call(rbind, lapply(sp, function(sp) {
+  data.frame(do.call(rbind, lapply(years, function(year) {
+    data <- select_sp_yr(sp, year, data = MF_trees_dc_sp[Treatment == "CC"])
+    stats <- sapply(stat_functions, function(f) f(data))
+    c(Species = sp, Year = year, stats)
+  })))
+}))
+numeric_columns <- colnames(results)[-which(colnames(results) %in% c("Species"))] # All except "Species"
+results[numeric_columns] <- lapply(results[numeric_columns], as.numeric)
+
+
+
+
+# linear models for effects of modelled treatment over time ---------------------
+MSL_trees_dc
+MSL_trees_dc[,`:=`(Unit = as.factor(Unit),
+                   TSH = Year - 1992)]
+model1 <- lmer(MgHa ~ Treatment * TSH + (1 | Unit), 
+               data = MSL_trees_dc)
+anova(model1)
+contrast(emmeans(model1, ~ Treatment | TSH), method = "tukey")
+
+#when do they converge
+# Post-hoc comparisons at each year
+years_to_test <- unique(MSL_trees_dc$TSH)
+results <- data.frame(Year = numeric(),
+                      cc_hr = numeric(),
+                      cc_lr = numeric(),
+                      cc_nh = numeric(),
+                      hr_lr = numeric(),
+                      hr_nh = numeric(),
+                      lr_nh = numeric())
+
+for (yr in years_to_test) {
+  emmeans_res <- emmeans(model1, pairwise ~ Treatment | TSH, at = list(TSH = yr))
+  ch <- summary(emmeans_res$contrasts)$p.value[1]  #cc v hr
+  cl <- summary(emmeans_res$contrasts)$p.value[2]  #
+  cn <- summary(emmeans_res$contrasts)$p.value[3]  #
+  hl <- summary(emmeans_res$contrasts)$p.value[4]  #
+  hn <- summary(emmeans_res$contrasts)$p.value[5]  #
+  ln <- summary(emmeans_res$contrasts)$p.value[6]  #
+  results <- rbind(results, data.frame(Year = yr, cc_hr = ch,
+                                       cc_lr = cl,
+                                       cc_nh = cn,
+                                       hr_lr = hl,
+                                       hr_nh = hn,
+                                       lr_nh = ln))
+}
+results_dt <- data.table(results)
+setkey(results_dt, Year)
+# Find the first year where p < 0.05
+columns_to_check <- setdiff(colnames(results_dt), "Year")
+lapply(columns_to_check, function(col) {
+  results_dt[get(col) >= 0.05, min(Year, na.rm = TRUE)]
+})
+
+# Find the first year where p >= 0.05
+heavy_light_same <- results_dt[heavy_no >= 0.05, min(Year)]
+heavy_med_same <- results_dt[heavy_med >= 0.05, min(Year)]
+light_med_same <- results_dt[light_med >= 0.05, min(Year)]
+
 
 
 #just modelled - all 100 years
@@ -1176,4 +1183,22 @@ ggplot()+
 # higher than med & heavy treatments, but the heavy and medium treatments are
 # no longer significantly different? 
 # looks like at about 50 years, the medium and heavy harvests merge
+
+MSL_trees_sl
+MSL_trees_dc
+
+MSL_trees_sl[Year == 2091,.(mn_carb = mean(MgHa),
+                sd_carb = sd(MgHa)), by = Treatment]
+
+MSL_trees_dc[Year == 2092,.(mn_carb = mean(MgHa),
+                           sd_carb = sd(MgHa)), by = Treatment]
+
+
+
+
+
+
+
+
+
 

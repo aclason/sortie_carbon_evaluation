@@ -97,6 +97,19 @@ g_dt_all <- foreach::foreach(i=1:length(t_p_l))%dopar%{
 
 parallel::stopCluster(cl)
 
+yrs <- seq(0,100)
+dt_table <- c()
+for(ij in 1:length(plot_root)){
+  for(i in 1:length(yrs)){
+    file_to_read <- paste0(in_dir,"/extracted/ext_SBS-",plot_root[ij],"-ds-nci_si_6_det_",yrs[i])
+    dt <- fread(file_to_read,sep="\t", header=T,na.strings = "--", skip=1)
+    dt[, ':='(timestep = yrs[i], Unit=plot_root[ij])]
+    dt_table <- rbind(dt_table,dt)
+  }
+  write.csv(dt_table,
+            paste0(in_dir,"/extracted/Sortie_ext_",plot_root[ij],".csv"), row.names = FALSE)
+}
+
 #----------------------------------------------------------------------------------
 #ICH---------------------------------------------------------------------------
 #using extract outputs from GUI:
@@ -106,7 +119,7 @@ detailed_path <- "./03_out_sortie/01_date_creek/extracted/"
 Outputs_path <- "./03_out_sortie/01_date_creek/extracted/"
 
 Outputs_ending <- "_-"
-years_to_extract <- seq(0,100)
+years_to_extract <- seq(0,30)
 Units_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/UnitBoundaries/"
 Gaps_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/GapCutsDateCreek/"
 

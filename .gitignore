@@ -105,3 +105,7 @@ archive/
 03_out_sortie/01_date_creek/glis.csv
 
 02_init_sortie/01_date_creek/FileLists/
+
+02_init_sortie/02_summit_lake/ParameterFiles/SBS-summit_3-ds-nci_si_6-logProps.txt
+
+02_init_sortie/02_summit_lake/ParameterFiles/BaseFiles/SBS-0506.txt

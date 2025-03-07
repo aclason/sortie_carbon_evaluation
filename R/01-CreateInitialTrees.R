@@ -31,8 +31,8 @@ Live_dt <- createTreeListSortie(cruise_data = tree_dat,
                                 liveTrees = TRUE)
 Live_dt[,DiamClass := paste0("Init.Dens_",DiamClass)]
 
-Dead_dt <- createTreeListSortie(dateCreek92_data = tree_dat,
-                                dateCreek_92_tallies = tally_dat,
+Dead_dt <- createTreeListSortie(cruise_data = tree_dat,
+                                fixed_data = tally_dat,
                                 liveTrees = FALSE)
 Dead_dt[,DiamClass := paste0("SnagInit_",DiamClass)]
 #1 going to take the sum of all decay classes to start the run

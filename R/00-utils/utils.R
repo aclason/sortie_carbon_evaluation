@@ -35,6 +35,39 @@ bias <- function(obs, pred) {mean(pred - obs)}
 rmse <- function(obs, pred) {sqrt(mean((obs - pred)^2))}
 rsquared <- function(obs, pred) {cor(obs, pred)^2}
 
+#simultaneous F-test
+sim_F <- function(obs, pred){
+  # Calculate residuals (y_i)
+  residuals <- obs - pred
+  # Sample size (n)
+  n <- length(obs)
+  
+  # Hypothesized coefficients
+  b0 <- 0  # Intercept
+  b1 <- 1  # Slope
+  
+  # Calculate numerator and denominator for the F-statistic
+  numerator <- sum((residuals - b0)^2 + (residuals - b1)^2) / 2
+  denominator <- sum((residuals - mean(residuals))^2) / (n - 2)
+  
+  # F-statistic  testing whether b0 = 0 and b1 = 1 simultaneously
+  F_statistic <- numerator / denominator
+  
+  # Degrees of freedom
+  df1 <- 2  # For b0 and b1
+  df2 <- n - 2  # Residual degrees of freedom
+  
+  # P-value
+  p_value <- pf(F_statistic, df1, df2, lower.tail = FALSE)
+  return(data.frame(F_statistic = F_statistic, p_value = p_value))
+  
+}
+# Example observed and predicted values
+observed <- c(10, 12, 15, 18, 20)  # Replace with your data
+predicted <- c(11, 12.5, 14.8, 17.5, 19.9)  # Replace with your model predictions
+
+
+
 
 # Cohen's D ------------------------------------------------------
 cohen_d <- function(obs, pred){
@@ -167,7 +200,8 @@ stat_functions <- list(
   Bias = function(data) bias(data$obs, data$pred),
   RMSE = function(data) rmse(data$obs, data$pred),
   R_squared = function(data) rsquared(data$obs, data$pred),
-  cohenD = function(data) cohen_d(data$obs, data$pred)
+  cohenD = function(data) cohen_d(data$obs, data$pred),
+  f_test = function(data) sim_F(data$obs, data$pred)
   #equi <- function(data) equi_result(data$obs, data$pred, eq_margin = 0.5)
 )
 

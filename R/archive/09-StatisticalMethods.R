@@ -1,7 +1,163 @@
 # A.Clason
 
 library(equivalence)
+#MF_trees_sl_m[,`:=`(unit_f = as.factor(unit),
+#                   treatment = as.factor(treatment),
+#                    State = as.factor(State))]
+#str(MF_trees_sl_m)
 
+dat_sl <- MF_trees_sl_m[val_type == "MgHa"]
+
+model1 <- lmer(val_ha ~ Treatment * TSH + (1 | Unit), 
+               data = dat_sl)
+
+model2 <- lmer(val_ha ~ obs_preds * Treatment + TSH + (1 | Unit), 
+               data = dat_sl)
+
+model3 <- lmer(val_ha ~ Treatment * TSH + obs_preds + (1 | Unit), 
+               data = dat_sl)
+
+model4 <- lmer(val_ha ~ obs_preds * TSH + Treatment  + (1 | Unit), 
+               data = dat_sl)
+
+model5 <- lmer(val_ha ~ obs_preds + TSH + Treatment  + (1 | Unit),
+               data = dat_sl)
+
+# this estimates the slope effects and contrasts:
+emt <- emtrends(model1, tukey ~ obs_preds, var = "TSH")
+multcomp::cld(emt,  alpha=.05, Letters=letters)
+
+emt <- emtrends(model1, tukey ~ Treatment, var = "TSH")
+multcomp::cld(emt,  alpha=.05, Letters=letters)
+
+#MgHa ~ Type * treatment * Species * TSH + (1 | unit)
+AIC(model1, model2, model3, model4, model5)
+dat_sl <- MF_trees_sl_sp_m[Species == "Bl" |Species == "Sx"][val_type == "MgHa"]
+
+model1 <- lmer(val_ha ~ obs_preds * Treatment * Species * TSH + (1 | Unit), 
+               data = dat_sl)
+
+model2 <- lmer(val_ha ~ obs_preds * Treatment * Species + TSH + (1 | Unit), 
+               data = dat_sl)
+
+model3 <- lmer(val_ha ~ obs_preds * Treatment * TSH + Species + (1 | Unit), 
+               data = dat_sl)
+
+model4 <- lmer(val_ha ~ obs_preds * Species * TSH + Treatment + (1 | Unit), 
+               data = dat_sl)
+
+model5 <- lmer(val_ha ~ Treatment * Species * TSH + obs_preds + (1 | Unit), 
+               data = dat_sl)
+
+model6 <- lmer(val_ha ~ obs_preds * Treatment + Species * TSH + (1 | Unit), 
+               data = dat_sl)
+
+model7 <- lmer(val_ha ~ obs_preds * Species + Treatment * TSH + (1 | Unit), 
+               data = dat_sl)
+
+model8 <- lmer(val_ha ~ obs_preds * TSH + Treatment * Species + (1 | Unit), 
+               data = dat_sl)
+
+model9 <- lmer(val_ha ~ obs_preds + TSH + Treatment * Species + (1 | Unit),
+               data = dat_sl)
+
+model10 <- lmer(val_ha ~ Treatment + TSH + obs_preds * Species + (1 | Unit), 
+                data = dat_sl)
+
+model11 <- lmer(val_ha ~ Species + TSH + obs_preds * Treatment + (1 | Unit), 
+                data = dat_sl)
+
+#MgHa ~ Type * treatment * Species * TSH + (1 | unit)
+AIC(model1, model2, model3, model4, model5, model6, model7, model8, model9, model10, 
+    model11)
+MF_trees_dc_m[,`:=`(Unit = as.factor(Unit),
+                    TSH = Year - 1992)]
+dat_dc <- MF_trees_dc_m[Measure == "MgHa"][TSH > 0]
+
+model1 <- lmer(val_ha ~ Type * Treatment * TSH + (1 | Unit), 
+               data = dat_dc)
+
+model2 <- lmer(val_ha ~ Type * Treatment + TSH + (1 | Unit), 
+               data = dat_dc)
+
+model3 <- lmer(val_ha ~ Treatment * TSH + Type + (1 | Unit), 
+               data = dat_dc)
+
+model4 <- lmer(val_ha ~ Type * TSH + Treatment  + (1 | Unit), 
+               data = dat_dc)
+
+model5 <- lmer(val_ha ~ Type + TSH + Treatment  + (1 | Unit),
+               data = dat_dc)
+
+#MgHa ~ Type * treatment * Species * TSH + (1 | unit)
+AIC(model1, model2, model3, model4, model5)
+anova(model1)
+
+contrast(emmeans(model1, ~ Type), method = "tukey")
+
+# this estimates the slope effects and contrasts:
+emt <- emtrends(model1, tukey ~ Treatment, var = "TSH")
+multcomp::cld(emt,  alpha=.05, Letters=letters)
+
+
+#MF_trees_dc_m[,`:=`(unit_f = as.factor(unit),
+#                   treatment = as.factor(treatment),
+#                    State = as.factor(State))]
+#str(MF_trees_dc_m)
+MF_trees_dc_sp_m[,`:=`(Unit = as.factor(Unit),
+                       TSH = Year - 1992)]
+str(MF_trees_dc_sp_m)
+sp_incl <- c("Cw","Sx","Ba", "Pl","Hw")
+
+dat_dc <- MF_trees_dc_sp_m[Species %in% sp_incl][val_type == "MgHa"][TSH > 0]
+
+model1 <- lmer(val_ha ~ obs_preds * Treatment * Species * TSH + (1 | Unit), 
+               data = dat_dc)
+
+model2 <- lmer(val_ha ~ obs_preds * Treatment * Species + TSH + (1 | Unit), 
+               data = dat_dc)
+
+model3 <- lmer(val_ha ~ obs_preds * Treatment * TSH + Species + (1 | Unit), 
+               data = dat_dc)
+
+model4 <- lmer(val_ha ~ obs_preds * Species * TSH + Treatment + (1 | Unit), 
+               data = dat_dc)
+
+model5 <- lmer(val_ha ~ Treatment * Species * TSH + obs_preds + (1 | Unit), 
+               data = dat_dc)
+
+model6 <- lmer(val_ha ~ obs_preds * Treatment + Species * TSH + (1 | Unit), 
+               data = dat_dc)
+
+model7 <- lmer(val_ha ~ obs_preds * Species + Treatment * TSH + (1 | Unit), 
+               data = dat_dc)
+
+model8 <- lmer(val_ha ~ obs_preds * TSH + Treatment * Species + (1 | Unit), 
+               data = dat_dc)
+
+model9 <- lmer(val_ha ~ obs_preds + TSH + Treatment * Species + (1 | Unit),
+               data = dat_dc)
+
+model10 <- lmer(val_ha ~ Treatment + TSH + obs_preds * Species + (1 | Unit), 
+                data = dat_dc)
+
+model11 <- lmer(val_ha ~ Species + TSH + obs_preds * Treatment + (1 | Unit), 
+                data = dat_dc)
+
+#MgHa ~ Type * treatment * Species * TSH + (1 | unit)
+AIC(model1, model2, model3, model4, model5, model6, model7, model8, model9, model10, 
+    model11)
+anova(model1)
+contrast(emmeans(model2, ~ Treatment), method = "tukey")
+contrast(emmeans(model1, ~ Species), method = "tukey")
+contrast(emmeans(model2, ~ Treatment| Species | obs_preds), method = "tukey")
+
+# this estimates the slope effects and contrasts:
+emt <- emtrends(model1, tukey ~ Treatment| Species , var = "TSH")
+multcomp::cld(emt,  alpha=.05, Letters=letters)
+
+emt <- emtrends(model1, tukey ~ Treatment| Species, var = "TSH")
+multcomp::cld(emt,  alpha=.05, Letters=letters)
 
 ###### Functions ###################################################################################
 # RMSE and Bias --------------------------------------------------

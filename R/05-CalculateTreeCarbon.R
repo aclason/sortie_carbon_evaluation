@@ -31,9 +31,9 @@ tree_dt <- rbindlist(
   fill = TRUE       # Fill missing columns with NA
 )
 
-tree_dt[!is.na(dead)]
-unique(tree_dt[!is.na(Fall)]$Fall)
-
+#tree_dt[!is.na(dead)]
+#unique(tree_dt[!is.na(Fall)]$Fall)
+#tree_dt[Fall == 2]
 #clip to centre 1 ha:
 tree_dt <- tree_dt[X >50 & X <150 & Y >50 & Y <150]
 
@@ -42,7 +42,7 @@ tree_dt <- tree_dt[X >50 & X <150 & Y >50 & Y <150]
 
 ## Carbon
 #use allometry to calculate height (From treeCalcs package)
-M_trees_sl <- treeCalcs::sortie_tree_carbon(sortie_outputs = tree_dt, dead = TRUE, 
+M_trees_sl <- treeCalcs::sortie_tree_carbon(sortie_outputs = tree_dt, 
                                             BEC = "SBS",
                                             ht_from_diam  = "standard")
 M_trees_sl[, unit := as.numeric(tstrsplit(Unit, "t_", fixed = TRUE)[[2]])][,Unit:=NULL]
@@ -116,23 +116,30 @@ saveRDS(MSD_trees_sl_sp, file.path(out_path,"MSD_trees_sl_sp.RDS"))
 
 
 ### Field -------------------------------------------------------------------------------------
-# using dima-height relationship - same as Date Creek
+# using diam-height relationship - same as Date Creek
 F_trees_sl <- SummitLakeData::clean_trees(raw_data = 
                                             "D:/Github/SummitLakeData/data-raw/SummitLakeData.csv")
 #saveRDS(F_trees_sl, file.path(out_path,"F_trees_sl.RDS"))
 
-# Calculate carbon per tree - what's the impact if I switch this to measured when available
+# Calculate carbon per tree 
 F_trees_sl[, Kg_treeC := treeCalcs::calc_tree_c(Species = Species,
-                                         DBH = DBH,
-                                         HT = Height,
-                                         Tree_class = Class),
-    by= seq_len(nrow(F_trees_sl))][, Mg_treeC := Kg_treeC/1000]
-
-F_trees_sl[, Kg_treeC := ifelse(is.na(meas_hgt), treeCalcs::calc_tree_c(Species = Species,
                                                 DBH = DBH,
-                                                HT = Height,
-                                                Tree_class = Class), meas_hgt),
+                                                HT = ifelse(is.na(meas_hgt),
+                                                        Height,meas_hgt),
+                                                Tree_class = Class),
            by= seq_len(nrow(F_trees_sl))][, Mg_treeC := Kg_treeC/1000]
+
+#F_trees_sl[, Kg_treeC := treeCalcs::calc_tree_c(Species = Species,
+ #                                        DBH = DBH,
+  #                                       HT = Height,
+   #                                      Tree_class = Class),
+  #  by= seq_len(nrow(F_trees_sl))][, Mg_treeC := Kg_treeC/1000]
+
+#F_trees_sl[, Kg_treeC := ifelse(is.na(meas_hgt), treeCalcs::calc_tree_c(Species = Species,
+ #                                               DBH = DBH,
+  #                                              HT = Height,
+   #                                             Tree_class = Class), meas_hgt),
+    #       by= seq_len(nrow(F_trees_sl))][, Mg_treeC := Kg_treeC/1000]
 
 
 # Calculate basal area per tree
@@ -237,7 +244,6 @@ setnames(tree_dt,
 #use allometry to calculate height (From treeCalcs package)
 M_trees_dc_sa <- tree_dt[Type != "Seedling"]
 M_trees_dc_sa <- treeCalcs::sortie_tree_carbon(sortie_outputs = M_trees_dc_sa, 
-                                            dead = TRUE, 
                                             BEC = "ICH",
                                             ht_from_diam = "standard")
 
@@ -325,9 +331,11 @@ MSD_trees_dc_abc <- MSD_trees_dc_ab[,.(MgUnit = mean(MgUnit),
 #divided by the ha measured in a subplot
 MSD_trees_dc_abc[, MgHa := MgUnit/0.1]
 MSD_trees_dc_abc[, BAHa := BaUnit/0.1] #divided by the ha measured in a subplot
-MSD_trees_dc <- merge(DateCreekData::Treatments, MSD_trees_dc_abc, 
-                      by = "Unit", all = TRUE)
+unit_yr <- DateCreekData::Treatments[, .(Year = seq(1992,2092)), by = .(Unit, Treatment)]
+MSD_trees_dc <- merge(unit_yr, MSD_trees_dc_abc, 
+                      by = c("Unit","Year"), all = TRUE)
 MSD_trees_dc[, State := "Dead"][,MgUnit := NULL][,BaUnit :=NULL]
+MSD_trees_dc[is.na(MgHa), `:=`(MgHa = 0, BAHa = 0)]
 
 
 #output -
@@ -496,20 +504,13 @@ F_trees_dc <- merge(F_trees_dc, DateCreekData::Treatments)
 # which (needs both the cruised and modelled heights)
 
 F_trees_dc[, hgt_final := 
-             ifelse(!is.na(DBH) & is.na(cruise_hgt), Height, #is DBH and no cruise hgt, use modelled,
-               ifelse(!is.na(DBH) & cruise_hgt == 0, Height, #is DBH and no cruise hgt, use modelled
+             ifelse(!is.na(DBH) & is.na(cruise_hgt), Height, #if DBH and no cruise hgt, use modelled,
+               ifelse(!is.na(DBH) & cruise_hgt == 0, Height, #if DBH and no cruise hgt, use modelled
                   ifelse(!is.na(DBH) & !is.na(cruise_hgt), cruise_hgt, #if DBH and cruise hgt, use that
                       NA)))]
 
-#only use predicted height:
-F_trees_dc[, hgt_final := ifelse(!is.na(DBH) , Height, NA)]
-
-#F_trees_dc[!is.na(DBH) & is.na(cruise_hgt)]
-#F_trees_dc[!is.na(DBH) & Tree.Class >2]
-#F_trees_dc[!is.na(DBH) & StubYN == "Y"]
-#F_trees_dc[is.na(hgt_final)]
-#F_trees_dc[is.na(DBH)] 
-
+#only use predicted height - same as Summit Lake (used this in testing):
+#F_trees_dc[, hgt_final := ifelse(!is.na(DBH) , Height, NA)]
 
 # tree carbon --------------------------------------------------------------------------------------
 F_trees_dc[, C_treeKg := treeCalcs::calc_tree_c(Species = Spp,
@@ -694,95 +695,23 @@ saveRDS(FSL_trees_dc_sp, file.path(out_path, "FSL_trees_dc_sp_mh.RDS"))
 
 
 
-
-
-
-
-
-
-
-
 #so this one jives with Erica's calcs
-F_trees_dc[, Kg_treeC := ifelse(Type == "Seedling",
-                                treeCalcs::calc_sm_tree_c_Ung(Species = Spp,
-                                                              Height_class = "31-130",
-                                                              Diam_est = 1,
-                                                              Health = "L"),
-                                ifelse(is.na(cruise_hgt) | cruise_hgt == 0,
-                                       treeCalcs::calc_tree_c(Species = Spp,
-                                                              DBH = DBH,
-                                                              HT = Height,
-                                                              Tree_class = Tree.Class),
-                                       treeCalcs::calc_tree_c(Species = Spp,
-                                                              DBH = DBH,
-                                                              HT = cruise_hgt, 
-                                                              Tree_class = Tree.Class))),
-           by= seq_len(nrow(F_trees_dc))]
+#F_trees_dc[, Kg_treeC := ifelse(Type == "Seedling",
+ #                               treeCalcs::calc_sm_tree_c_Ung(Species = Spp,
+  #                                                            Height_class = "31-130",
+   #                                                           Diam_est = 1,
+    #                                                          Health = "L"),
+     #                           ifelse(is.na(cruise_hgt) | cruise_hgt == 0,
+      #                                 treeCalcs::calc_tree_c(Species = Spp,
+       #                                                       DBH = DBH,
+        #                                                      HT = Height,
+         #                                                     Tree_class = Tree.Class),
+          #                             treeCalcs::calc_tree_c(Species = Spp,
+           #                                                   DBH = DBH,
+            #                                                  HT = cruise_hgt, 
+             #                                                 Tree_class = Tree.Class))),
+           #by= seq_len(nrow(F_trees_dc))]
 
-F_trees_dc[, Mg_treeC := Kg_treeC/1000]
-F_trees_dc[, MgHa := Mg_treeC * SPH]
-
-#1993:-------------------------------------------------------
-# Count how many plots there are for each treatment unit
-# so when averaging carbon/unit later, we can take into account the plots that had zero C
-dat.1993$count<-rep(1, length(dat.1993$Unit ))
-Trees_in_Plots<-ddply(dat.1993[c("Unit", "PlotNum", "count")], .(Unit, PlotNum), numcolwise(sum))
-Trees_in_Plots$count<-rep(1, length(Trees_in_Plots$Unit ))
-Plot_in_Units<-ddply(Trees_in_Plots[c("Unit", "count")], .(Unit), numcolwise(sum))
-Plot_in_Units #stands should have 23 or 30 plots (30 for 40% retention treatments)
-
-#2010:-------------------------------------------------------
-# Count how many plots there are for each treatment unit
-# so when averaging carbon/unit later, we can take into account the plots that had zero C
-dat.2010$count<-rep(1, length(dat.2010$Unit ))
-Trees_in_Plots<-ddply(dat.2010[c("Unit", "Gd.Pt","Plot.Size", "count")], .(Unit, Gd.Pt,Plot.Size), numcolwise(sum))
-Trees_in_Plots$count<-rep(1, length(Trees_in_Plots$Unit ))
-Plot_in_Units<-ddply(Trees_in_Plots[c("Unit", "count")], .(Unit), numcolwise(sum))
-Plot_in_Units #stands should have 20 or 30 plots (30 for 40% and 70% retention treatments)
-# C2 is down 2 plots
-#no clear-cut large tree plots
-
-#201x--------------------------------------------------------
-# Count how many plots there are for each treatment unit
-# so when averaging carbon/unit later, we can take into account the plots that had zero C
-dat.2018x$count <- rep(1, length(dat.2018x$Unit))
-Trees_in_Plots <- ddply(dat.2018x[c("Unit", "Gd.Pt","Plot.Size", "count")], .(Unit, Gd.Pt,Plot.Size), numcolwise(sum))
-Trees_in_Plots$count <- rep(1, length(Trees_in_Plots$Unit))
-Plot_in_Units <- ddply(Trees_in_Plots[c("Unit", "count")], .(Unit), numcolwise(sum))
-Plot_in_Units
-
-#2022--------------------------------------------------------
-# Count how many plots there are for each treatment unit
-# so when averaging carbon/unit later, we can take into account the plots that had zero C
-#read in plot labels to calculate original number of plots per unit
-labels2022<-read.csv("Cleaned 2022 labels.csv", stringsAsFactors = TRUE)
-labels2022$count <- rep(1, length(labels2022$Unit))
-Plot_in_Units <- ddply(labels2022[c("Unit", "count")], .(Unit), numcolwise(sum))
-Plot_in_Units #stands should have 20 or 30 plots (30 for 40% and 70% retention treatments),
-
-
-
-# Count how many plots there are for each treatment unit
-# so when averaging carbon/unit later, we can take into account the plots that had zero C
-dat.201x$count <- 1 #rep(1, length(dat.2018x$Unit))
-Trees_in_Plots <- plyr::ddply(dat.201x[c("Unit", "Gd.Pt","Plot.Size", "count")],
-                              .(Unit, Gd.Pt,Plot.Size), numcolwise(sum))
-Trees_in_Plots$count <- rep(1, length(Trees_in_Plots$Unit))
-Plot_in_Units <- plyr:: ddply(Trees_in_Plots[c("Unit", "count")],
-                              .(Unit), numcolwise(sum))
-Plot_in_Units #A3 missing the 2 problematic plots, C2 missing 2 plots that couldn't be found and B2 and B5 and C3 had plots removed from all years
-
-
-
-#check how many plots there are for each treatment unit
-#remove problematic plots across years
-#See ?remove_plots_trees for details
-dat.2022<-remove_plots_trees(dat.2022)
-dat.2022$count <- rep(1, length(dat.2022$Unit))
-Trees_in_Plots <-
-  ddply(dat.2022[c("Unit", "Gd.Pt", "Plot.Size", "count")], .(Unit, Gd.Pt, Plot.Size), numcolwise(sum))
-Trees_in_Plots$count <- rep(1, length(Trees_in_Plots$Unit))
-Plot_in_Units <-
-  ddply(Trees_in_Plots[c("Unit", "count")], .(Unit), numcolwise(sum))
-Plot_in_Units #stands should have 20 or 30 plots (30 for 40% and 70% retention treatments),
+#F_trees_dc[, Mg_treeC := Kg_treeC/1000]
+#F_trees_dc[, MgHa := Mg_treeC * SPH]
 
