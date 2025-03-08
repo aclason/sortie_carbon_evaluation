@@ -38,22 +38,6 @@ vignettes/*.pdf
 # Figures created
 Figures/
 
-Inputs/Data/
-
-Inputs/ParameterFiles/BaseFiles/
-
-Inputs/ParameterValues/
-
-Inputs/SORTIEruns/SummitLake/Outputs/extracted/
-
-Inputs/SORTIEruns/SummitLake/Outputs/
-
-Inputs/SORTIEruns/SummitLake/ParameterFiles/BaseFiles/
-
-Inputs/SORTIEruns/SummitLake/ParameterFiles/
-
-Inputs/SORTIEruns/SummitLake/ParameterValues/
-
 runtar.bat
 
 temp.xml
@@ -62,50 +46,34 @@ temp.xml
 
 *.xml
 
-00_archive - delete/extracted/
-
-00_archive - delete/outputs/
-
-00_archive - delete/
-
-03_out_sortie/02_summit_lake/
-
-02_init_sortie/01_date_creek/ParameterValues/
-
-02_init_sortie/02_summit_lake/New folder/ParameterValues/
-
-02_init_sortie/02_summit_lake/ParameterValues/
-
-02_init_sortie/02_summit_lake/FileLists/
-
 *.jpeg
 
 HarvestTrees.txt
-
-02_init_sortie/02_summit_lake/archive/
-
-01_data/SBS_nat_regen.csv
-
-01_data/SBS_plantedTrees.csv
-
-02_init_sortie/02_summit_lake/Productivity/
-
-04_out_carbon/
-
-archive/
-
-05_out_analysis/
-
-03_out_sortie/01_date_creek/extracted/
 
 *.out
 
 *.tar
 
-03_out_sortie/01_date_creek/glis.csv
+01_data/
 
 02_init_sortie/01_date_creek/FileLists/
 
-02_init_sortie/02_summit_lake/ParameterFiles/SBS-summit_3-ds-nci_si_6-logProps.txt
+02_init_sortie/01_date_creek/ParameterValues/
 
-02_init_sortie/02_summit_lake/ParameterFiles/BaseFiles/SBS-0506.txt
+02_init_sortie/02_summit_lake/archive/
+
+02_init_sortie/02_summit_lake/ParameterFiles/BaseFiles/
+
+02_init_sortie/02_summit_lake/ParameterValues/
+
+02_init_sortie/02_summit_lake/Productivity/
+
+03_out_sortie/01_date_creek/extracted/
+
+03_out_sortie/01_date_creek/
+
+03_out_sortie/02_summit_lake/extracted/
+
+04_out_carbon/
+
+05_out_analysis/
