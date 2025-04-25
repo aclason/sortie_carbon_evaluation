@@ -6,8 +6,6 @@ library(lmerTest)
 library(emmeans)
 source(file.path("R","00-utils","utils.R"))
 
-
-
 in_path <- "04_out_carbon"
 out_path <- "05_out_analysis"
 
@@ -26,7 +24,222 @@ MF_trees_sl_m <- melt(MFL_trees_sl,
                       variable.name = "Type", 
                       value.name = "val_ha")
 MF_trees_sl_m[, c("Measure", "Type") := tstrsplit(Type, "_")]
-#### BASAL AREA
+
+#### Basal area recovery analysis
+#modelled basal area
+MSL_trees_sl <- readRDS(file.path(in_path,"MSL_trees_sl.RDS"))
+MSL_trees_dc <- readRDS(file.path(in_path,"MSL_trees_dc.RDS"))
+
+#pre-harvest basal area baseline
+FPH_ba_sl <- fread(file.path("01_data","SL_preharvest_BA.csv"))
+FPH_ba_dc <- fread(file.path("01_data","DC_preharvest_BA.csv"))
+setnames(FPH_ba_sl, "Plot", "Unit")
+FPH_ba_sl <- merge(FPH_ba_sl, SummitLakeData::Treatments, by.x = "Unit", by.y = "unit")
+setnames(FPH_ba_sl, "treatment", "Treatment")
+FPH_ba_dc <- merge(FPH_ba_dc, DateCreekData::Treatments)
+
+
+
+
+
+MSL_trees_sl_sum <- Rmisc::summarySE(data = MSL_trees_sl, 
+                                     measurevar = "BaHa", 
+                                     groupvars = c("Treatment","Year"))
+MSL_trees_sl_sum <- MSL_trees_sl_sum[MSL_trees_sl_sum$Year < 2093,]
+
+FPH_ba_sl_sum <- Rmisc::summarySE(data = FPH_ba_sl,
+                              measurevar = "pre_harv_BA",
+                              groupvars = "Treatment")
+
+ggplot(NULL,
+       aes(x = Year, y = BaHa, fill = Treatment, group = Treatment)) +
+  geom_line(data = MSL_trees_sl_sum, aes(col = Treatment), size = 1.2) +
+  #scale_x_continuous(breaks = seq(0, 28, by = 2), expand = expansion(mult = c(0, 0.05))) +
+  scale_colour_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  coord_cartesian(ylim = c(0, 80)) +
+  labs(
+    x = "Year",
+    y = expression(paste("Live basal area ( ", m^2, "/ha)")),
+    col = "Treatment",
+    fill = "Treatment",
+    shape = "Treatment"
+  ) +
+  geom_ribbon(
+    data = MSL_trees_sl_sum,
+    aes(ymin = BaHa - ci, ymax = BaHa + ci),
+    alpha = 0.1,
+    linetype = "solid",
+    color = "grey"
+  ) +
+  geom_hline(
+    data = FPH_ba_sl_sum,
+    aes(yintercept = pre_harv_BA, col = Treatment),
+    linetype = "dashed",
+    size = 1
+  ) +
+  geom_rect(
+    data = FPH_ba_sl_sum,
+    aes(xmin = -Inf, xmax = Inf, ymin = pre_harv_BA - ci, ymax = pre_harv_BA + ci, fill = Treatment),
+    alpha = 0.15,
+    inherit.aes = FALSE
+  )+
+  theme(legend.position = "bottom")+
+  guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
+  guides(color = guide_legend(override.aes = list(size = 5)))
+ggsave(filename = "SBS_live_BA_baseline.jpg",
+       path = file.path(out_path), device='jpeg', dpi=1000)
+
+
+MSL_trees_dc_sum <- Rmisc::summarySE(data = MSL_trees_dc, 
+                                     measurevar = "BAHa", 
+                                     groupvars = c("Year", "Treatment"))
+FPH_ba_dc_sum <- Rmisc::summarySE(data = FPH_ba_dc,
+                                  measurevar = "pre_harv_BA",
+                                  groupvars = "Treatment")
+ggplot(NULL,
+       aes(x = Year, y = BAHa, fill = Treatment, group = Treatment)) +
+  geom_line(data = MSL_trees_dc_sum, aes(col = Treatment), size = 1.2) +
+  #scale_x_continuous(breaks = seq(0, 28, by = 2), expand = expansion(mult = c(0, 0.05))) +
+  scale_color_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  ) +
+  scale_fill_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  ) +
+  coord_cartesian(ylim = c(0, 100)) +
+  labs(
+    x = "Year",
+    y = expression(paste("Live basal area ( ", m^2, "/ha)")),
+    col = "Treatment",
+    fill = "Treatment",
+    shape = "Treatment"
+  ) +
+  geom_ribbon(
+    data = MSL_trees_dc_sum,
+    aes(ymin = BAHa - ci, ymax = BAHa + ci),
+    alpha = 0.1,
+    linetype = "solid",
+    color = "grey"
+  ) +
+  geom_hline(
+    data = FPH_ba_dc_sum,
+    aes(yintercept = pre_harv_BA, col = Treatment),
+    linetype = "dashed",
+    size = 1
+  ) +
+  geom_rect(
+    data = FPH_ba_dc_sum,
+    aes(xmin = -Inf, xmax = Inf, ymin = pre_harv_BA - ci, ymax = pre_harv_BA + ci, fill = Treatment),
+    alpha = 0.05,
+    inherit.aes = FALSE
+  )+
+  theme(legend.position = "bottom")+
+  guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
+  guides(color = guide_legend(override.aes = list(size = 5)))
+
+ggsave(filename = "ICH_live_BA_baseline.jpg",
+       path = file.path(out_path), device='jpeg', dpi=1000)
+
+
+years_to_test <- unique(MSL_trees_sl[Year != 1992 & Year < 2093, Year])
+treatments <- unique(MSL_trees_sl$Treatment)
+
+results_list <- list()
+
+for (yr in years_to_test) {
+  for (trt in treatments) {
+    
+    # Data for this year-treatment combo
+    current <- MSL_trees_sl[Year == yr & Treatment == trt, BaHa]
+    baseline <- FPH_ba_sl[Treatment == trt, pre_harv_BA]
+    
+    # Basic Welch's t-test
+    if (length(current) > 1 & length(baseline) > 1) {
+      ttest <- t.test(current, baseline, var.equal = FALSE)
+      results_list[[paste(yr, trt)]] <- data.table(
+        Year = yr,
+        Treatment = trt,
+        p_val = round(ttest$p.value, 3)
+      )
+    }
+  }
+}
+results_dt <- rbindlist(results_list)
+# Find the first year when each treatment is NOT sig different from the baseline
+results_dt[, TSH := Year - 1992]
+setkey(results_dt, Year)
+results_dt[Treatment == "light/no"][1:90]
+results_dt[, .SD[which.min(p_val >= 0.05)], by = Treatment]
+
+# Join baseline values onto yearly dataset
+FPH_ba_sl_sum <- as.data.table(FPH_ba_sl_sum)
+MSL_trees_sl_sum <- data.table(MSL_trees_sl_sum)
+merged <- merge(MSL_trees_sl_sum, FPH_ba_sl_sum[, .(Treatment, pre_harv_BA)], by = "Treatment")
+merged[, diff := abs(BaHa - pre_harv_BA)]
+merged[, perc_diff := abs(BaHa - pre_harv_BA) / pre_harv_BA]
+recovery_years <- merged[perc_diff <= 0.05, .SD[which.min(Year)], by = Treatment]
+recovery_years[, TSH := Year - 1992]
+
+
+
+
+#ICH --------
+years_to_test <- unique(MSL_trees_dc[Year != 1992 & Year < 2093, Year])
+treatments <- unique(MSL_trees_dc$Treatment)
+
+results_list <- list()
+
+for (yr in years_to_test) {
+  for (trt in treatments) {
+    
+    # Data for this year-treatment combo
+    current <- MSL_trees_dc[Year == yr & Treatment == trt, BAHa]
+    baseline <- FPH_ba_dc[Treatment == trt, pre_harv_BA]
+    
+    # Basic Welch's t-test
+    if (length(current) > 1 & length(baseline) > 1) {
+      ttest <- t.test(current, baseline, var.equal = FALSE)
+      results_list[[paste(yr, trt)]] <- data.table(
+        Year = yr,
+        Treatment = trt,
+        p_val = round(ttest$p.value, 3)
+      )
+    }
+  }
+}
+results_dt <- rbindlist(results_list)
+
+# Find the first year when each treatment is NOT sig different from the baseline
+results_dt[, TSH := Year - 1992]
+setkey(results_dt, Year)
+results_dt[, .SD[which.min(p_val < 0.05)], by = Treatment]
+results_dt[Treatment == "CC"][1:90]
+
+
+# Join baseline values onto yearly dataset
+FPH_ba_dc_sum <- as.data.table(FPH_ba_dc_sum)
+MSL_trees_dc_sum <- data.table(MSL_trees_dc_sum)
+merged <- merge(MSL_trees_dc_sum, FPH_ba_dc_sum[, .(Treatment, pre_harv_BA)], by = "Treatment")
+merged[, diff := abs(BAHa - pre_harv_BA)]
+merged[, perc_diff := abs(BAHa - pre_harv_BA) / pre_harv_BA]
+recovery_years <- merged[perc_diff <= 0.05, .SD[which.min(Year)], by = Treatment]
+recovery_years[, TSH := Year - 1992]
+
+
+#earlier Basal area figures -------------------------------------------------------------
 MSL_trees_sl_sp_sum <- Rmisc::summarySE(MSL_trees_sl_sp[Species == "Bl" |
                                                           Species == "Sx"],
                                         measurevar = "BaHa", 
@@ -60,6 +273,7 @@ ggplot()+
   guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
   guides(color = guide_legend(override.aes = list(size = 5)))
   facet_wrap(~Year)
+
 ggsave(filename = "SBS_BA_fit.png",plot = last_plot(), width = 7.91, height = 5.61,
        units = "in", path = file.path(out_path), device='png', dpi=1200)
 years <- c(1992, 1994, 1997, 2009, 2019, "All Years")
@@ -255,7 +469,8 @@ MFL_trees_dc <- merge(FSL_trees_dc, MSL_trees_dc, by = c("Unit","Treatment","Yea
 setnames(MFL_trees_dc, c("MgHa.x","MgHa.y", "BAHa.x", "BAHa.y","QMD.x","QMD.y"),
          c("MgHa_obs","MgHa_pred","BAHa_obs", "BAHa_pred","QMD_obs","QMD_pred"))
 
-#MF_trees_dc_sp <- merge(FSL_trees_dc_sp, MSL_trees_dc_sp, by = c("Unit","Treatment","Year","State","Species"),
+# MF_trees_dc_sp <- merge(FSL_trees_dc_sp, MSL_trees_dc_sp, 
+#  by = c("Unit","Treatment","Year","State","Species"),
 #                       all.x = TRUE)
 #setnames(MF_trees_dc_sp, c("MgHa.x","MgHa.y"), c("MgHa_obs","MgHa_pred"))
 
@@ -303,6 +518,7 @@ ggplot()+
   guides(color = guide_legend(override.aes = list(size = 5)))
 ggsave(filename = "ICH_BA_fit.png",plot = last_plot(), width = 7.91, height = 5.61,
        units = "in", path = file.path(out_path), device='png', dpi=1200)
+
 # Goodness of fit
 years <- c(1992, 1993, 2010, 2018, 2022, "All Years")
 
@@ -371,6 +587,26 @@ equi_result(FSL_trees_dc[Year == 2022]$BAHa,
             MSL_trees_dc[Year == 2022]$BAHa,
             eq_margin = 0.5)
 #not rejected == they are not different
+mean(MSL_trees_dc[Year == 1992]$BAHa)
+sd(MSL_trees_dc[Year == 1992]$BAHa)
+mean(FSL_trees_dc[Year == 1992]$BAHa)
+sd(FSL_trees_dc[Year == 1992]$BAHa)
+
+mean(MSL_trees_dc[Year == 1993]$BAHa)
+sd(MSL_trees_dc[Year == 1993]$BAHa)
+mean(FSL_trees_dc[Year == 1993]$BAHa)
+sd(FSL_trees_dc[Year == 1993]$BAHa)
+
+mean(MSL_trees_dc[Year == 2010]$BAHa)
+sd(MSL_trees_dc[Year == 2010]$BAHa)
+mean(FSL_trees_dc[Year == 2010]$BAHa)
+sd(FSL_trees_dc[Year == 2010]$BAHa)
+
+mean(MSL_trees_dc[Year == 2018]$BAHa)
+sd(MSL_trees_dc[Year == 2018]$BAHa)
+mean(FSL_trees_dc[Year == 2018]$BAHa)
+sd(FSL_trees_dc[Year == 2018]$BAHa)
+
 mean(MSL_trees_dc[Year == 2022]$BAHa)
 sd(MSL_trees_dc[Year == 2022]$BAHa)
 mean(FSL_trees_dc[Year == 2022]$BAHa)
