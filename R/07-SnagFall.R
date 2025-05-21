@@ -8,8 +8,8 @@ library(dplyr)
 in_path <- file.path("03_out_sortie")
 out_path <- file.path("05_out_analysis")
 
-
-#SBS---------------------------------------------------------------------------
+# create snag files ----------------------------------------------------------
+#SBS-----------
 My_newvalsPath <- file.path("02_init_sortie","02_summit_lake","ParameterValues")
 sum_in_path <- file.path(in_path, "02_summit_lake","extracted")
 
@@ -32,10 +32,27 @@ for(j in 1:length(plots)){
 #just adults and snags where somewhere they becaome snags
 sl_out_as <- dt_table[Type == "Adult" | Type =="Snag"]
 
-saveRDS(sl_out_as, paste0(file.path(in_path, "02_summit_lake"),"sl_snags.rds"))
+saveRDS(sl_out_as, file.path(in_path, "02_summit_lake","sl_snags.rds"))
+
+#ICH --------------
+#read in outputs
+#these are created from detailed output extraction, then subplot methods in R. Extracting
+#all live trees from these large runs is slow in R compared to C++ (sortie GUI)
+dc_in_path <- file.path(in_path, "01_date_creek","extracted")
+
+outfiles <- grep("grids",list.files(dc_in_path, pattern = ".csv", 
+                                    full.names = TRUE),
+                 value = TRUE, invert = TRUE)
+outfiles <- grep("ah",outfiles, invert = T, value = T)
+tree_dt <- rbindlist(lapply(outfiles, fread), fill = TRUE)
+
+#just adults and snags where somewhere they becaome snags
+dc_out_as <- tree_dt[Type == "Adult" | Type =="Snag"]
+saveRDS(dc_out_as, file.path(in_path, "01_date_creek","dc_snags.rds"))
 
 
-# start here to read in snags: -----------------------
+# create snag figures ---------------------------------------------------------
+#SBS------------------------------
 sl_out_as <- readRDS(file.path(in_path, "02_summit_lake","sl_snags.rds"))
 #clip to centre 1 ha:
 #tree_dt <- tree_dt[X >50 & X <150 & Y >50 & Y <150]
@@ -159,20 +176,7 @@ sl_snagTime_sp[, study := "SummitLake"]
 
 #----------------------------------------------------------------------------------
 #ICH---------------------------------------------------------------------------
-
-#read in outputs
-#these are created from detailed output extraction, then subplot methods in R. Extracting
-#all live trees from these large runs is slow in R compared to C++ (sortie GUI)
-dc_in_path <- file.path(in_path, "01_date_creek","extracted")
-
-outfiles <- grep("grids",list.files(dc_in_path, pattern = ".csv", 
-                                    full.names = TRUE),
-                 value = TRUE, invert = TRUE)
-outfiles <- grep("ah",outfiles, invert = T, value = T)
-tree_dt <- rbindlist(lapply(outfiles, fread), fill = TRUE)
-
-#just adults and snags where somewhere they becaome snags
-dc_out_as <- tree_dt[Type == "Adult" | Type =="Snag"]
+dc_out_as <- readRDS(file.path(in_path, "01_date_creek","dc_snags.rds"))
 
 #not all outputs have snag break height
 #dc_NH <- dc_out[Treatment=="NH"]
