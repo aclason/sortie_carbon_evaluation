@@ -77,3 +77,7 @@ HarvestTrees.txt
 04_out_carbon/
 
 05_out_analysis/
+
+03_out_sortie/02_summit_lake/sl_snags.rds
+
+Baseline_DC.csv
