@@ -239,6 +239,21 @@ recovery_years <- merged[perc_diff <= 0.05, .SD[which.min(Year)], by = Treatment
 recovery_years[, TSH := Year - 1992]
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #earlier Basal area figures -------------------------------------------------------------
 MSL_trees_sl_sp_sum <- Rmisc::summarySE(MSL_trees_sl_sp[Species == "Bl" |
                                                           Species == "Sx"],
