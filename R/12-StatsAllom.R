@@ -1,5 +1,6 @@
 library(ggplot2)
 library(data.table)
+library(dplyr)
 source(file.path("R","00-utils","utils.R"))
 
 in_path <- "04_out_carbon"
@@ -11,34 +12,7 @@ setnames(F_trees_sl, c("unit","treatment"), c("Unit","Treatment"))
 F_trees_dc <- readRDS(file.path(in_path,"F_trees_dc.RDS"))
 
 # SBS -------------------------------------------------------------------------------------------
-
-ggplot()+
-  geom_point(aes(x = Height, y = meas_hgt, 
-                 color = Species), 
-             alpha = 0.4,
-             size = 2,
-             data = F_trees_sl[!is.na(meas_hgt) & Class <3])+
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey")+
-  coord_cartesian() +
-  labs(
-    x = "Height predicted (m) ",
-    y = "Height observed (m)",
-    col = NULL,
-    fill = "Treatment",
-    shape = "Treatment"
-  ) +
-  xlim(c(0,50))+
-  ylim(c(0,50))+
-  theme(legend.position = "none")+
-  #guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
-  # guides(color = guide_legend(override.aes = list(size = 5)))+
-  facet_wrap(~Species)
-#ggsave(filename = "Hgt_sl_pred_obs.png",plot = last_plot(),
- #      units = "in", path = file.path(out_path,"Supplementary"), device='png', dpi=1200)
-
-
-
-#height by species and treatment ---------------------------------
+#(Appendix A1:height by species and treatment)
 F_trees_sl[, Treatment := factor(Treatment, 
                                  levels = c("light/no", "med", "heavy"))]
 
@@ -74,8 +48,7 @@ ggplot()+
                                                "heavy" = "Low retention")))
 ggsave(filename = "Hgt_sl_pred_obs.png",plot = last_plot(),
        units = "in", path = file.path(out_path,"Supplementary"), device='png', dpi=1200)
-
-#stats to go with the above:
+##stats to go with the above:
 select_sp_h <- function(sp, data) {
   obs <- data[Species == sp]$meas_hgt
   pred <- data[Species == sp]$Height
@@ -105,6 +78,169 @@ rsquared(F_trees_sl[!is.na(meas_hgt) & Class <3 & Species == "Sx" & Treatment ==
          F_trees_sl[!is.na(meas_hgt) & Class <3 & Species == "Sx"& Treatment == "med"]$Height)
 rsquared(F_trees_sl[!is.na(meas_hgt) & Class <3 & Species == "Sx" & Treatment == "heavy"]$meas_hgt,
          F_trees_sl[!is.na(meas_hgt) & Class <3 & Species == "Sx"& Treatment == "heavy"]$Height)
+
+# mean and descriptive statistics for basal area
+years <- c(1992, 1994, 1997, 2009, 2019, "All Years")
+
+MSL_trees_sl <- readRDS(file.path(in_path,"MSL_trees_sl.RDS"))
+FSL_trees_sl <- readRDS(file.path(in_path,"FSL_trees_sl.RDS"))
+
+MSD_trees_sl <- readRDS(file.path(in_path,"MSD_trees_sl.RDS"))
+FSD_trees_sl <- readRDS(file.path(in_path,"FSD_trees_sl.RDS"))
+
+MSL_trees_sl_sp <- readRDS(file.path(in_path,"MSL_trees_sl_sp.RDS"))
+FSL_trees_sl_sp <- readRDS(file.path(in_path,"FSL_trees_sl_sp.RDS"))
+SL_preharvest <- fread(file.path("01_data","SL_preHarvest_BA.csv"))
+setnames(SL_preharvest, "Plot","Unit")
+
+MFL_trees_sl <- merge(FSL_trees_sl, MSL_trees_sl, by = c("Unit","Treatment","Year","State"),
+                      all.x = TRUE)
+setnames(MFL_trees_sl, c("MgHa.x","MgHa.y","BaHa.x","BaHa.y"), 
+         c("MgHa_obs","MgHa_pred","BaHa_obs","BaHa_pred"))
+MFD_trees_sl <- merge(FSD_trees_sl, MSD_trees_sl, by = c("Unit","Treatment","Year","State"),
+                      all.x = TRUE)
+setnames(MFD_trees_sl, c("MgHa.x","MgHa.y","BaHa.x","BaHa.y"), 
+         c("MgHa_obs","MgHa_pred","BaHa_obs","BaHa_pred"))
+MFD_trees_sl[is.na(MgHa_pred), `:=`(MgHa_pred = 0, BaHa_pred = 0)]#in 1992 - no dead in model
+
+MF_trees_sl_sp <- merge(FSL_trees_sl_sp, MSL_trees_sl_sp, 
+                        by = c("Unit","Treatment","Year","State","Species"),
+                        all.x = TRUE)
+setnames(MF_trees_sl_sp, c("MgHa.x","MgHa.y","BaHa.x","BaHa.y"), 
+         c("MgHa_obs","MgHa_pred","BaHa_obs","BaHa_pred"))
+MF_trees_sl_sp[is.na(MgHa_pred), MgHa_pred := 0]
+
+# summary by treatment and year
+MSL_trees_sl_sum_ty <- Rmisc::summarySE(data = MSL_trees_sl, 
+                                        measurevar = "BaHa", 
+                                        groupvars = c("Treatment","Year"))
+MSL_trees_sl_sum_ty <- MSL_trees_sl_sum_ty[MSL_trees_sl_sum_ty$Year < 2093,]
+FSL_trees_sl_sum_ty <- Rmisc::summarySE(data = FSL_trees_sl, 
+                                        measurevar = "BaHa", 
+                                        groupvars = c("Treatment","Year"))
+# summary by year
+MSL_trees_sl_sum <- Rmisc::summarySE(data = MSL_trees_sl, 
+                                     measurevar = "BaHa", 
+                                     groupvars = c("Year"))
+FSL_trees_sl_sum <- Rmisc::summarySE(data = FSL_trees_sl, 
+                                     measurevar = "BaHa", 
+                                     groupvars = c("Year"))
+
+# summary by treatment, year and species for Bl and Sx
+MSL_trees_sl_sp_sum_blsx <- Rmisc::summarySE(MSL_trees_sl_sp[Species == "Bl" |
+                                                               Species == "Sx" ],
+                                             measurevar = "BaHa", 
+                                             groupvars = c("Treatment","Year", "Species"))
+FSL_trees_sl_sp_sum_blsx <- Rmisc::summarySE(FSL_trees_sl_sp[Species == "Bl"|
+                                                               Species == "Sx"],
+                                             measurevar = "BaHa", 
+                                             groupvars = c("Treatment","Year", "Species"))
+
+# summary by treatment, year and species for all species
+MSL_trees_sl_sp_sum <- Rmisc::summarySE(MSL_trees_sl_sp,
+                                        measurevar = "BaHa", 
+                                        groupvars = c("Treatment","Year", "Species"))
+MSL_trees_sl_sp_sum <- data.table(MSL_trees_sl_sp_sum)
+
+results <- lapply(years, function(year) {
+  data <- select_years(year,meas_obs = BAHa_obs, meas_pred = BAHa_pred,
+                       data = MFL_trees_sl)
+  sapply(stat_functions, function(f) f(data))
+})
+results_df <- do.call(rbind, results)
+results_df <- data.frame(Year = years, results_df)
+results_df
+results <- as.data.table(lapply(results_df, function(col) {
+  if (all(sapply(col, length) == 1)) unlist(col) else col
+}))
+results[, f_test := NULL]
+
+t.test(MFL_trees_sl[Year == 2019]$BAHa_obs,
+       MFL_trees_sl[Year == 2019]$BAHa_pred)
+
+MFL_trees_summary <- MFL_trees_sl[, .(
+  BaHa_pred_mean = mean(BAHa_pred, na.rm = TRUE),
+  BaHa_pred_sd   = sd(BAHa_pred, na.rm = TRUE),
+  BaHa_obs_mean  = mean(BAHa_obs, na.rm = TRUE),
+  BaHa_obs_sd    = sd(BAHa_obs, na.rm = TRUE)
+), by = .(Year)]
+MFL_trees_summary <- merge(results[Year != "All Years",.(Year = as.numeric(Year), Bias, RMSE, R_squared)], 
+                           MFL_trees_summary, by = "Year")
+MFL_trees_summary[, per_bias := round((Bias/BaHa_obs_mean)*100,0)]
+MFL_trees_summary[, Ecosystem := "SBS"]
+final_table <- MFL_trees_summary[, .(
+  Ecosystem,
+  Year,
+  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(Bias, 2), per_bias),
+  RMSE = round(RMSE, 2),
+  R2 = round(R_squared, 2),
+  `Mean ± (SD) predicted BAHa` = paste0(round(BaHa_pred_mean, 1),
+                                        " ± (", round(BaHa_pred_sd, 1), ")"),
+  `Mean ± (SD) observed BAHa` = paste0(round(BaHa_obs_mean, 1),
+                                       " ± (", round(BaHa_obs_sd, 1), ")")
+)]
+
+# ---------------
+final_table 
+# ---------------
+
+#species - year combo
+sp <- c("Bl","Sx")
+years <- c(1992, 1994, 1997, 2009, 2019)
+MF_trees_sl_sp[is.na(BaHa_pred), BaHa_pred := 0]
+
+select_sp_yr <- function(sp, year, data) {
+  obs <- data[data$Species == sp & data$Year == year, ]$BaHa_obs
+  pred <- data[data$Species == sp & data$Year == year, ]$BaHa_pred
+  n_value <- nrow(data[data$Species == sp, ])
+  list(obs = obs, pred = pred, n_value = n_value)
+}
+
+results <- do.call(rbind, lapply(sp, function(sp) {
+  data.frame(do.call(rbind, lapply(years, function(year) {
+    data <- select_sp_yr(sp, year, data = MF_trees_sl_sp)
+    stats <- sapply(stat_functions, function(f) f(data))
+    c(Species = sp, Year = year, stats)
+  })))
+}))
+numeric_columns <- colnames(results)[-which(colnames(results) %in% c("Species"))] # All except "Species"
+#results[numeric_columns] <- lapply(results[numeric_columns], as.numeric)
+results <- as.data.table(lapply(results, function(col) {
+  if (all(sapply(col, length) == 1)) unlist(col) else col
+}))
+results[, f_test := NULL]
+MFL_trees_summary <- MF_trees_sl_sp[, .(
+  BaHa_pred_mean = mean(BaHa_pred, na.rm = TRUE),
+  BaHa_pred_sd   = sd(BaHa_pred, na.rm = TRUE),
+  BaHa_obs_mean  = mean(BaHa_obs, na.rm = TRUE),
+  BaHa_obs_sd    = sd(BaHa_obs, na.rm = TRUE)
+), by = .(Year, Species)]
+MFL_trees_summary <- merge(results[,.(Species, Year, Bias, RMSE, R_squared)], 
+                           MFL_trees_summary, by = c("Species","Year"))
+MFL_trees_summary[, per_bias := round((Bias/BaHa_obs_mean)*100,0)]
+MFL_trees_summary[, Ecosystem := "SBS"]
+final_table <- MFL_trees_summary[, .(
+  Ecosystem,
+  Species,
+  Year,
+  `Bias – BAHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(Bias, 2), per_bias),
+  RMSE = round(RMSE, 2),
+  R2 = round(R_squared, 2),
+  `Mean ± (SD) predicted BAHa` = paste0(round(BaHa_pred_mean, 1),
+                                        " ± (", round(BaHa_pred_sd, 1), ")"),
+  `Mean ± (SD) observed BAHa` = paste0(round(BaHa_obs_mean, 1),
+                                       " ± (", round(BaHa_obs_sd, 1), ")")
+)]
+
+# ---------------
+final_table
+# ---------------
+t.test(MF_trees_sl_sp[Year == 2019 & Species == "Bl"]$BaHa_obs,
+       MF_trees_sl_sp[Year == 2019 & Species == "Bl"]$BaHa_pred)
+
+t.test(MF_trees_sl_sp[Year == 2019 & Species == "Sx"]$BaHa_obs,
+       MF_trees_sl_sp[Year == 2019 & Species == "Sx"]$BaHa_pred)
+
 
 
 # ICH -------------------------------------------------------------------------------------------
@@ -179,47 +315,193 @@ results_df <- do.call(rbind, results)
 results_df <- data.frame(Species = sp, results_df)
 results_df
 
-#HR
-n_vals <- F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                     & Tree.Class <3 & Treatment == "HR", .N, by = "Spp"]
-sp <- unique(F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                        & Tree.Class <3 & Treatment == "HR"]$Spp)
-results <- lapply(sp, function(sp) {
-  data <- select_sp_h(sp, data = F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                                            & Tree.Class <3 & Treatment == "HR"])
-  sapply(stat_functions, function(f) f(data))
-})
-results_df <- do.call(rbind, results)
-results_df <- data.frame(Species = sp, results_df)
-results_df
 
-#LR
-n_vals <- F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                     & Tree.Class <3 & Treatment == "LR", .N, by = "Spp"]
-sp <- unique(F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                        & Tree.Class <3 & Treatment == "LR"]$Spp)
-results <- lapply(sp, function(sp) {
-  data <- select_sp_h(sp, data = F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                                            & Tree.Class <3 & Treatment == "LR"])
-  sapply(stat_functions, function(f) f(data))
-})
-results_df <- do.call(rbind, results)
-results_df <- data.frame(Species = sp, results_df)
-results_df
 
-#NH
-n_vals <- F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                     & Tree.Class <3 & Treatment == "NH", .N, by = "Spp"]
-sp <- unique(F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                        & Tree.Class <3 & Treatment == "NH"]$Spp)
-results <- lapply(sp, function(sp) {
-  data <- select_sp_h(sp, data = F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                                            & Tree.Class <3 & Treatment == "NH"])
+MSL_trees_dc <- readRDS(file.path(in_path,"MSL_trees_dc.RDS"))
+FSL_trees_dc <- readRDS(file.path(in_path,"FSL_trees_dc.RDS"))
+
+MSL_trees_dc_sp <- readRDS(file.path(in_path,"MSL_trees_dc_sp.RDS"))
+FSL_trees_dc_sp <- readRDS(file.path(in_path,"FSL_trees_dc_sp.RDS"))
+
+MFL_trees_dc <- merge(FSL_trees_dc, MSL_trees_dc, by = c("Unit","Treatment","Year","State"),
+                      all.x = TRUE)
+setnames(MFL_trees_dc, c("MgHa.x","MgHa.y", "BAHa.x", "BAHa.y"),
+         c("MgHa_obs","MgHa_pred","BAHa_obs", "BAHa_pred"))
+
+MF_trees_dc_sp <- merge(FSL_trees_dc_sp, MSL_trees_dc_sp, 
+                        by = c("Unit","Treatment","Year","State","Species"),
+                        all.x = TRUE)
+setnames(MF_trees_dc_sp, c("MgHa.x","MgHa.y", "BAHa", "BaHa"),
+         c("MgHa_obs","MgHa_pred","BAHa_obs", "BAHa_pred"))
+MF_trees_dc_sp[is.na(MgHa_obs)]
+
+MF_trees_dc_m <- melt(MFL_trees_dc, 
+                      id.vars = c("Unit", "Treatment", "Year", "State"),
+                      measure.vars = c("MgHa_obs", "MgHa_pred", "BAHa_obs", "BAHa_pred"),
+                      variable.name = "Type", 
+                      value.name = "val_ha")
+MF_trees_dc_m[, c("Measure", "Type") := tstrsplit(Type, "_")]
+
+MF_trees_dc_sp_m <- melt(MF_trees_dc_sp, 
+                         id.vars = c("Unit", "Treatment", "Year", "State", "Species"),
+                         measure.vars = c("MgHa_obs", "MgHa_pred", "BAHa_obs", "BAHa_pred"),
+                         variable.name = "Type", 
+                         value.name = "val_ha")
+
+MF_trees_dc_sp_m[, obs_preds := ifelse(Type == "MgHa_obs" | Type == "BaHa_obs", "obs", "pred")]
+MF_trees_dc_sp_m[, val_type := tstrsplit(Type, "_", fixed = TRUE)[[1]]]
+
+MSL_trees_dc_sum <- Rmisc::summarySE(data = MSL_trees_dc, 
+                                     measurevar = "MgHa", 
+                                     groupvars = c("Year", "Treatment"))
+
+MSL_trees_dc_sp_sum <- Rmisc::summarySE(MSL_trees_dc_sp,
+                                        measurevar = "MgHa", 
+                                        groupvars = c("Treatment","Year", "Species"))
+MSL_trees_dc_sp_sum <- data.table(MSL_trees_dc_sp_sum)
+
+
+
+# Goodness of fit
+years <- c(1992, 1993, 2010, 2018, 2022, "All Years")
+
+results <- lapply(years, function(year) {
+  data <- select_years(year,meas_obs = BAHa_obs, meas_pred = BAHa_pred,
+                       data = MFL_trees_dc)
   sapply(stat_functions, function(f) f(data))
 })
 results_df <- do.call(rbind, results)
-results_df <- data.frame(Species = sp, results_df)
+results_df <- data.frame(Year = years, results_df)
 results_df
+results <- as.data.table(lapply(results_df, function(col) {
+  if (all(sapply(col, length) == 1)) unlist(col) else col
+}))
+results[, f_test := NULL]
+
+#is there a significant difference between predicted and observed by 2022?
+equi_result(MFL_trees_dc[Year == 2022]$MgHa_obs, 
+            MFL_trees_dc[Year == 2022]$MgHa_pred, 14) # 10% of the mean observed
+equi_boot(MFL_trees_dc$MgHa_obs,
+          MFL_trees_dc$MgHa_pred, n_bootstraps = 10000, eq_margin = 14)
+t.test(FSL_trees_dc[Year == 2022]$BAHa, 
+       MSL_trees_dc[Year == 2022]$BAHa) #not diff
+summary(lm(MgHa_pred ~ MgHa_obs, MFL_trees_dc))
+
+equivalence_bounds <- c(0.01,0.05, 0.10, 0.15, 0.18, 0.2, 0.25, 0.3,
+                        0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
+# Subset data for the specific year
+yr_subset <- MFL_trees_dc[Year == 2022, ]
+
+# Calculate the mean of observed values for the species
+mean_obs <- mean(yr_subset$MgHa_obs)
+
+# Loop through each equivalence bound and calculate the TOST p-value
+results_table <- data.table(
+  Bound_Percentage = equivalence_bounds,
+  Bound_Value = equivalence_bounds * mean_obs,
+  TOST_p_value = sapply(equivalence_bounds, function(bound) {
+    tost_result <- equi_result(
+      yr_subset$MgHa_obs,
+      yr_subset$MgHa_pred,
+      mean_obs * bound
+    )
+    round(tost_result$tost.p.value, 2)
+  })
+)
+
+results_table
+
+MFL_trees_summary <- MFL_trees_dc[, .(
+  BaHa_pred_mean = mean(BAHa_pred, na.rm = TRUE),
+  BaHa_pred_sd   = sd(BAHa_pred, na.rm = TRUE),
+  BaHa_obs_mean  = mean(BAHa_obs, na.rm = TRUE),
+  BaHa_obs_sd    = sd(BAHa_obs, na.rm = TRUE)
+), by = .(Year)]
+MFL_trees_summary <- merge(results[Year != "All Years",.(Year = as.numeric(Year), Bias, RMSE, R_squared)], 
+                           MFL_trees_summary, by = c("Year"))
+MFL_trees_summary[, per_bias := round((Bias/BaHa_obs_mean)*100,0)]
+MFL_trees_summary[, Ecosystem := "ICH"]
+final_table <- MFL_trees_summary[, .(
+  Ecosystem,
+  Year,
+  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(Bias, 2), per_bias),
+  RMSE = round(RMSE, 2),
+  R2 = round(R_squared, 2),
+  `Mean ± (SD) predicted MgHa` = paste0(round(BaHa_pred_mean, 1),
+                                        " ± (", round(BaHa_pred_sd, 1), ")"),
+  `Mean ± (SD) observed MgHa` = paste0(round(BaHa_obs_mean, 1),
+                                       " ± (", round(BaHa_obs_sd, 1), ")")
+)]
+
+# ---------------
+fwrite(final_table, "Table 3_ICH.csv", encoding = "UTF-8")  
+# ---------------
+
+#species - year combo
+sp <- c("Hw","Cw","Ba","Sx","Pl")
+years <- c(1992, 1993, 2010, 2018, 2022)
+
+select_sp_yr <- function(sp, year, data) {
+  obs <- data[data$Species == sp & data$Year == year, ]$BAHa_obs
+  pred <- data[data$Species == sp & data$Year == year, ]$BAHa_pred
+  n_value <- nrow(data[data$Species == sp, ])
+  list(obs = obs, pred = pred, n_value = n_value)
+}
+
+
+results <- do.call(rbind, lapply(sp, function(sp) {
+  data.frame(do.call(rbind, lapply(years, function(year) {
+    data <- select_sp_yr(sp, year, data = MF_trees_dc_sp)
+    stats <- sapply(stat_functions, function(f) f(data))
+    c(Species = sp, Year = year, stats)
+  })))
+}))
+results <- as.data.table(lapply(results, function(col) {
+  if (all(sapply(col, length) == 1)) unlist(col) else col
+}))
+results[, f_test := NULL]
+MFL_trees_summary <- MF_trees_dc_sp[, .(
+  BaHa_pred_mean = mean(BAHa_pred, na.rm = TRUE),
+  BaHa_pred_sd   = sd(BAHa_pred, na.rm = TRUE),
+  BaHa_obs_mean  = mean(BAHa_obs, na.rm = TRUE),
+  BaHa_obs_sd    = sd(BAHa_obs, na.rm = TRUE)
+), by = .(Year, Species)]
+
+MFL_trees_summary <- merge(results[,.(Species, Year, Bias, RMSE, R_squared)], 
+                           MFL_trees_summary, by = c("Species","Year"))
+MFL_trees_summary[, per_bias := round((Bias/BaHa_obs_mean)*100,0)]
+MFL_trees_summary[, Ecosystem := "ICH"]
+final_table <- MFL_trees_summary[, .(
+  Ecosystem,
+  Species,
+  Year,
+  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(Bias, 2), per_bias),
+  RMSE = round(RMSE, 2),
+  R2 = round(R_squared, 2),
+  `Mean ± (SD) predicted MgHa` = paste0(round(BaHa_pred_mean, 1),
+                                        " ± (", round(BaHa_pred_sd, 1), ")"),
+  `Mean ± (SD) observed MgHa` = paste0(round(BaHa_obs_mean, 1),
+                                       " ± (", round(BaHa_obs_sd, 1), ")")
+)]
+
+# ---------------
+final_table 
+# ---------------
+t.test(MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$BAHa_obs,
+       MF_trees_dc_sp[Year == 2022 & Species == "Hw"]$BAHa_pred)
+
+t.test(MF_trees_dc_sp[Year == 2022 & Species == "Cw"]$BAHa_obs,
+       MF_trees_dc_sp[Year == 2022 & Species == "Cw"]$BAHa_pred)
+
+t.test(MF_trees_dc_sp[Year == 2022 & Species == "Sx"]$BAHa_obs,
+       MF_trees_dc_sp[Year == 2022 & Species == "Sx"]$BAHa_pred)
+
+t.test(MF_trees_dc_sp[Year == 2022 & Species == "Pl"]$BAHa_obs,
+       MF_trees_dc_sp[Year == 2022 & Species == "Pl"]$BAHa_pred)
+
+t.test(MF_trees_dc_sp[Year == 2022 & Species == "Ba"]$BAHa_obs,
+       MF_trees_dc_sp[Year == 2022 & Species == "Ba"]$BAHa_pred)
+
 
 
 
