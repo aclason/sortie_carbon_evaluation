@@ -1,0 +1,3107 @@
+# Alana Clason & Erica Lilles
+
+#to assess snag dynamics from sortie runs
+library(data.table)
+library(purrr)
+library(dplyr)
+
+in_path <- file.path("03_out_sortie")
+out_path <- file.path("05_out_analysis")
+
+# create snag files ----------------------------------------------------------
+#SBS-----------
+My_newvalsPath <- file.path("02_init_sortie","02_summit_lake","ParameterValues")
+sum_in_path <- file.path(in_path, "02_summit_lake","extracted")
+
+run_name <- "ds-nci_si_6"
+plots <- stringr::str_split(list.files(My_newvalsPath, pattern = "summit"),".csv",
+                            simplify = TRUE)[,1]
+yrs <- seq(0,100)
+#rsortie parsing function is not correctly attributing dead codes, so need to use GUI
+# output to calculate snag fall
+dt_table <- data.table()
+for(j in 1:length(plots)){
+  for(i in 1:length(yrs)){
+    file_to_read <- paste0(sum_in_path,"/ext_SBS-",plots[j],"-",run_name,"_det_",yrs[i])
+    dt <- fread(file_to_read,sep="\t", header=T,na.strings = "--", skip=1)
+    dt[, ':='(timestep = yrs[i], Unit= plots[j])]
+    #dt <- dt[X >50 & X <150 & Y >50 & Y <150]
+    dt_table <- rbind(dt_table,dt)
+  }
+}
+#just adults and snags where somewhere they becaome snags
+sl_out_as <- dt_table[Type == "Adult" | Type =="Snag"]
+
+saveRDS(sl_out_as, file.path(in_path, "02_summit_lake","sl_snags.rds"))
+
+#ICH --------------
+#read in outputs
+#these are created from detailed output extraction, then subplot methods in R. Extracting
+#all live trees from these large runs is slow in R compared to C++ (sortie GUI)
+dc_in_path <- file.path(in_path, "01_date_creek","extracted")
+
+outfiles <- grep("grids",list.files(dc_in_path, pattern = ".csv", 
+                                    full.names = TRUE),
+                 value = TRUE, invert = TRUE)
+outfiles <- grep("ah",outfiles, invert = T, value = T)
+tree_dt <- rbindlist(lapply(outfiles, fread), fill = TRUE)
+
+#just adults and snags where somewhere they becaome snags
+dc_out_as <- tree_dt[Type == "Adult" | Type =="Snag"]
+saveRDS(dc_out_as, file.path(in_path, "01_date_creek","dc_snags.rds"))
+
+
+# create snag figures ---------------------------------------------------------
+#SBS------------------------------
+sl_out_as <- readRDS(file.path(in_path, "02_summit_lake","sl_snags.rds"))
+#clip to centre 1 ha:
+#tree_dt <- tree_dt[X >50 & X <150 & Y >50 & Y <150]
+
+sl_out_as[Type == "Snag" & dead == 0]
+sl_out_as[, UniqXY := paste0(Unit,"_",X,"_",Y)]
+setkey(sl_out_as,UniqXY)
+
+#1. Label the row with whether a snag is created, or snag falls. 
+#This won't capture trees that fall without becoming snags
+#which trees are snags at some point
+ids <- unique(sl_out_as[Type=="Snag"]$UniqXY)
+
+
+#this does the state change from adult to snag
+sl_out_as[, state_change := Type != data.table::shift(Type, type = "lag", 
+                                                     fill = NA), by = "UniqXY"]
+
+#if using output processed via SORTIE GUI:
+#then there are codes of "alive" and natural applied - 
+#I still don't know how codes of snag harvest would be coded
+#sl_out_as[, state_type := ifelse(Type == "Adult","Adult",
+ #                             ifelse(Type == "Snag" & `Dead Code` =="Alive" & #not sure why dead code is diff
+  #                                    state_change == TRUE, "SnagCreate",
+   #                             ifelse(Type == "Snag" & `Dead Code` =="Alive", "Snag",
+    #                             ifelse(Type=="Snag" & `Dead Code` == "Natural", "SnFallNext",
+     #                             ifelse(Type == "Snag" & `Dead Code` == "Harvest",
+      #                             "SnagHarvest", NA)))))]
+
+sl_out_as[, state_type := ifelse(Type == "Adult","Adult",
+                           ifelse(Type == "Snag" & `Dead Code` =="Alive" & 
+                                    state_change == TRUE, "SnagCreate",
+                            ifelse(Type == "Snag" & `Dead Code` =="Alive"& 
+                                     state_change == FALSE, "Snag",
+                             ifelse(Type=="Snag" & `Dead Code` == "Natural"&
+                                      state_change == TRUE, "SnagCreate&Fall",
+                              ifelse(Type=="Snag" & `Dead Code` == "Natural"&
+                                       state_change == FALSE, "SnFallNext",
+                               ifelse(Type == "Snag" & `Dead Code` == "Harvest"&
+                                        state_change == TRUE, "SnagCreateHarvest",
+                                ifelse(Type == "Snag" & `Dead Code` == "Harvest"&
+                                         state_change == FALSE, "SnagHarvest", NA)))))))]
+                  
+sl_treats <- SummitLakeData::Treatments[, .(Unit = paste0("summit_",unit), treatment)]
+sl_out_as <- merge(sl_out_as, sl_treats, by.x ="Unit", by.y = "Unit")
+setnames(sl_out_as, "treatment", "Treatment")
+
+#2. Calculate Snag creation and snag fall rate - Plot level
+sl_adult <- sl_out_as[state_type=="Adult", .N, by=.(Treatment, Unit, timestep)]
+setnames(sl_adult, "N", "NumAdult")
+sl_snag <- sl_out_as[state_type=="Snag", .N, by=.(Treatment, Unit, timestep)]
+setnames(sl_snag, "N", "NumExistSnags")
+sl_snagcreate <- sl_out_as[state_type=="SnagCreate"|state_type=="SnagCreate&Fall",
+                           .N, by=.(Treatment, Unit, timestep)]
+setnames(sl_snagcreate, "N", "NumSnagCreate")
+sl_snagfall <- sl_out_as[state_type=="SnFallNext"|state_type=="SnagCreate&Fall",
+                         .N, by=.(Treatment, Unit, timestep)]
+setnames(sl_snagfall, "N", "NumSnagFall")
+
+sl_ad_sn <- merge(sl_adult, sl_snag, by=c("Treatment","Unit","timestep"), all=TRUE)
+sl_ad_sn <- merge(sl_ad_sn, sl_snagcreate, by=c("Treatment","Unit","timestep"), all=TRUE)
+sl_ad_sn <- merge(sl_ad_sn, sl_snagfall, by=c("Treatment","Unit","timestep"), all=TRUE)
+sl_ad_sn <- sl_ad_sn[, lapply(.SD, function(x) ifelse(is.na(x), 0, x))]
+sl_ad_sn <- sl_ad_sn[,.(NumAdult, NumSnagCreate, NumSnagFall,
+                        SnagRecrRate = ifelse(NumSnagCreate == 0,0,
+                                              (NumSnagCreate/(NumAdult+NumSnagCreate))*100), 
+                        SnagFallRate = ifelse(NumSnagFall == 0,0, 
+                                              (NumSnagFall/(NumExistSnags +NumSnagCreate+
+                                                              NumSnagFall))*100)),
+                     by=c("Treatment","Unit","timestep")]
+
+#3. Calculate Snag creation and snag fall rate - by Species
+sl_adult <- sl_out_as[state_type=="Adult", .N, by=.(Treatment, Unit, timestep,Species)]
+setnames(sl_adult, "N", "NumAdult")
+sl_snag <- sl_out_as[state_type=="Snag", .N, by=.(Treatment, Unit, timestep,Species)]
+setnames(sl_snag, "N", "NumExistSnags")
+sl_snagcreate <- sl_out_as[state_type=="SnagCreate"|state_type=="SnagCreate&Fall",
+                           .N, by=.(Treatment, Unit, timestep,Species)]
+setnames(sl_snagcreate, "N", "NumSnagCreate")
+sl_snagfall <- sl_out_as[state_type=="SnFallNext"|state_type=="SnagCreate&Fall",
+                         .N, by=.(Treatment, Unit, timestep,Species)]
+setnames(sl_snagfall, "N", "NumSnagFall")
+
+
+sl_ad_sn_sp <- merge(sl_adult, sl_snag, by=c("Treatment","Unit","timestep","Species"),
+                     all = TRUE)
+sl_ad_sn_sp <- merge(sl_ad_sn_sp, sl_snagcreate, by=c("Treatment","Unit","timestep","Species"),
+                     all = TRUE)
+sl_ad_sn_sp <- merge(sl_ad_sn_sp, sl_snagfall, by=c("Treatment","Unit","timestep","Species"),
+                     all = TRUE)
+sl_ad_sn_sp <- sl_ad_sn_sp[, lapply(.SD, function(x) ifelse(is.na(x), 0, x))]
+sl_ad_sn_sp
+
+
+sl_ad_sn_sp <- sl_ad_sn_sp[,.(NumAdult, NumSnagCreate, NumSnagFall,NumExistSnags,
+                               SnagRecrRate = ifelse(NumSnagCreate == 0,0,
+                                                     (NumSnagCreate/(NumAdult+NumSnagCreate))*100), 
+                               SnagFallRate = ifelse(NumSnagFall == 0,0, 
+                                                     (NumSnagFall/(NumExistSnags +NumSnagCreate+
+                                                                     NumSnagFall))*100)),
+                            by=c("Treatment","Unit","timestep","Species")]
+
+#3. how long are snags standing
+#of the snags that fall, how long were they standing? So first figure out which trees fall
+fallIDs <- unique(sl_out_as[state_type == "SnFallNext"|state_type=="SnagCreate&Fall"]$UniqXY)
+
+#then count how many years they stood as snags
+for(i in 1:length(fallIDs)){
+  sl_out_as[UniqXY == fallIDs[i] & Type == "Snag", TimeAsSnag := .N]
+}
+
+sl_snag_time <- sl_out_as[UniqXY %in% fallIDs & state_type == "SnFallNext"|
+                            UniqXY %in% fallIDs & state_type == "SnagCreate&Fall",
+                      .(Treatment,Unit,DBH,UniqXY,TimeAsSnag)]
+sl_snag_time[, study := "SummitLake"]
+
+sl_snagTime_sp <- sl_out_as[UniqXY %in% fallIDs & state_type == "SnFallNext"|
+                              UniqXY %in% fallIDs & state_type == "SnagCreate&Fall", 
+                            .(Treatment,Unit,Species,DBH,UniqXY,TimeAsSnag)]
+sl_snagTime_sp[, study := "SummitLake"]
+
+#----------------------------------------------------------------------------------
+#ICH---------------------------------------------------------------------------
+dc_out_as <- readRDS(file.path(in_path, "01_date_creek","dc_snags.rds"))
+
+#not all outputs have snag break height
+#dc_NH <- dc_out[Treatment=="NH"]
+dc_out_as[, UniqXY := paste0(Unit,"_",X,"_",Y)]
+setkey(dc_out_as,UniqXY)
+
+#1. Label the row with whether a snag is created, or snag falls. 
+#This won't capture trees that fall without becoming snags
+
+#which trees are snags at some point
+ids <- unique(dc_out_as[Type=="Snag"]$UniqXY)
+
+#this does the state change from adult to snag
+dc_out_as[, state_change := Type != data.table::shift(Type, type = "lag", 
+                                                     fill = NA), by = "UniqXY"]
+#dc_out_as[, state_type := ifelse(Type == "Adult","Adult",
+ #                         ifelse(Type == "Snag" & Dead.Code =="Alive" &
+  #                                 state_change == TRUE, "SnagCreate",
+   #                         ifelse(Type == "Snag" & Dead.Code =="Alive", "Snag",
+    #                          ifelse(Type=="Snag" & Dead.Code == "Natural", "SnFallNext",
+     #                           ifelse(Type == "Snag" & Dead.Code == "Harvest",
+      #                                 "SnagHarvest", NA)))))]
+
+dc_out_as[, state_type := ifelse(Type == "Adult","Adult",
+                           ifelse(Type == "Snag" & Dead.Code =="Alive" & 
+                                    state_change == TRUE, "SnagCreate",
+                            ifelse(Type == "Snag" & Dead.Code =="Alive"& 
+                                     state_change == FALSE, "Snag",
+                             ifelse(Type=="Snag" & Dead.Code == "Natural"&
+                                      state_change == TRUE, "SnagCreate&Fall",
+                              ifelse(Type=="Snag" & Dead.Code == "Natural"&
+                                       state_change == FALSE, "SnFallNext",
+                                ifelse(Type == "Snag" & Dead.Code == "Harvest"&
+                                        state_change == TRUE, "SnagCreateHarvest",
+                                  ifelse(Type == "Snag" & Dead.Code == "Harvest"&
+                                           state_change == FALSE, "SnagHarvest", NA)))))))]
+
+#2. Calculate Snag creation and snag fall rate - Plot level
+dc_adult <- dc_out_as[state_type=="Adult", .N, by=.(Treatment, Unit, timestep)]
+setnames(dc_adult, "N", "NumAdult")
+dc_snag <- dc_out_as[state_type=="Snag", .N, by=.(Treatment, Unit, timestep)]
+setnames(dc_snag, "N", "NumExistSnags")
+dc_snagcreate <- dc_out_as[state_type=="SnagCreate"|state_type=="SnagCreate&Fall", 
+                           .N, by=.(Treatment, Unit, timestep)]
+setnames(dc_snagcreate, "N", "NumSnagCreate")
+dc_snagfall <- dc_out_as[state_type=="SnFallNext"|state_type=="SnagCreate&Fall", 
+                         .N, by=.(Treatment, Unit, timestep)]
+setnames(dc_snagfall, "N", "NumSnagFall")
+dc_ad_sn <- merge(dc_adult, dc_snag, by=c("Treatment","Unit","timestep"), all = TRUE)
+dc_ad_sn <- merge(dc_ad_sn, dc_snagcreate, by=c("Treatment","Unit","timestep"), all=TRUE)
+dc_ad_sn <- merge(dc_ad_sn, dc_snagfall, by=c("Treatment","Unit","timestep"), all=TRUE)
+dc_ad_sn <- dc_ad_sn[, lapply(.SD, function(x) ifelse(is.na(x), 0, x))]
+dc_ad_sn <- dc_ad_sn[,.(NumAdult, NumSnagCreate, NumExistSnags, NumSnagFall,
+                        SnagRecrRate = ifelse(NumSnagCreate == 0,0,
+                                              (NumSnagCreate/(NumAdult+NumSnagCreate))*100), 
+                        SnagFallRate = ifelse(NumSnagFall == 0,0, 
+                                              (NumSnagFall/(NumExistSnags + NumSnagCreate+
+                                                              NumSnagFall))*100)),
+                     by=c("Treatment","Unit","timestep")]
+
+
+#2. Calculate Snag creation and snag fall rate - by Species
+dc_adult <- dc_out_as[state_type=="Adult", .N, by=.(Treatment, Unit, timestep, Species)]
+setnames(dc_adult, "N", "NumAdult")
+dc_snag <- dc_out_as[state_type=="Snag", .N, by=.(Treatment, Unit, timestep, Species)]
+setnames(dc_snag, "N", "NumExistSnags")
+dc_snagcreate <- dc_out_as[state_type=="SnagCreate"|state_type=="SnagCreate&Fall", 
+                           .N, by=.(Treatment, Unit, timestep, Species)]
+setnames(dc_snagcreate, "N", "NumSnagCreate")
+dc_snagfall <- dc_out_as[state_type=="SnFallNext"|state_type=="SnagCreate&Fall", 
+                         .N, by=.(Treatment, Unit, timestep, Species)]
+setnames(dc_snagfall, "N", "NumSnagFall")
+
+dc_ad_sn_sp <- merge(dc_adult, dc_snag, by=c("Treatment","Unit","timestep","Species"),
+                     all = TRUE)
+dc_ad_sn_sp <- merge(dc_ad_sn_sp, dc_snagcreate, by=c("Treatment","Unit","timestep","Species"),
+                     all = TRUE)
+dc_ad_sn_sp <- merge(dc_ad_sn_sp, dc_snagfall, by=c("Treatment","Unit","timestep","Species"),
+                     all = TRUE)
+dc_ad_sn_sp <- dc_ad_sn_sp[, lapply(.SD, function(x) ifelse(is.na(x), 0, x))]
+dc_ad_sn_sp
+
+dc_ad_sn_sp <- dc_ad_sn_sp[,.(NumAdult, NumSnagCreate, NumExistSnags, NumSnagFall,
+                              SnagRecrRate = ifelse(NumSnagCreate == 0,0,
+                                                    (NumSnagCreate/(NumAdult+NumSnagCreate))*100), 
+                              SnagFallRate = ifelse(NumSnagFall == 0,0, 
+                                                    (NumSnagFall/(NumExistSnags + NumSnagCreate+
+                                                                    NumSnagFall))*100)),
+                           by=c("Treatment","Unit","timestep","Species")]
+
+
+#3. how long are snags standing
+#of the snags that fall, how long were they standing? So first figure out which trees fall
+fallIDs <- unique(dc_out_as[state_type == "SnFallNext"|state_type == "SnagCreate&Fall"]$UniqXY)
+
+#then count how many years they stood as snags
+for(i in 1:length(fallIDs)){
+  dc_out_as[UniqXY == fallIDs[i] & Type == "Snag", TimeAsSnag := .N]
+}
+
+dc_snagTime_sp <- dc_out_as[UniqXY %in% fallIDs & state_type == "SnFallNext"|
+                              UniqXY %in% fallIDs & state_type == "SnagCreate&Fall", 
+                      .(Treatment,Unit,Species,DBH,UniqXY,TimeAsSnag)]
+
+dc_snagTime <- dc_out_as[UniqXY %in% fallIDs & state_type == "SnFallNext"|
+                           UniqXY %in% fallIDs & state_type == "SnagCreate&Fall", 
+                      .(Treatment,Unit,DBH,UniqXY,TimeAsSnag)]
+dc_snagTime[, study := "DateCreek"]
+dc_snagTime_sp[,study := "DateCreek"]
+
+
+# Figures: --------------------------------------------------
+snag_time <- rbind(sl_snag_time,dc_snagTime)
+snag_time[,.N, by = .(Treatment)]
+
+sl_snag_time[, Treatment := factor(Treatment, levels = c("light/no", "med", "heavy"))]
+dc_snagTime[, Treatment := factor(Treatment, levels = c("NH","LR", "HR", "CC"))]
+
+theme_set(theme_minimal(base_family = "Arial") +  # Change "Arial" to your desired font
+            theme(
+              text = element_text(family = "Arial"),  # Change "Arial" to your desired font
+              plot.title = element_text(size = 14, face = "bold"),
+              axis.title = element_text(size = 14, face = "bold"),
+              axis.text = element_text(size = 14, face = "bold"),
+              legend.text = element_text(size = 14, face = "bold"),
+              strip.text = element_text(size = 14, face = "bold"),
+              legend.title = element_text(size = 14, face = "bold")
+            ))
+
+# Snag longevity ---------
+ggplot()+
+  geom_boxplot(aes(y = TimeAsSnag, x = Treatment, fill = as.character(Treatment)),
+               data = sl_snag_time)+
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("Low retention", "Medium retention", "High retention")
+  ) +
+  scale_x_discrete(
+    labels = c("heavy" = "Low retention", "med" = "Medium retention", "light/no" = "High retention")
+  ) +
+  ylim(c(0,100))+
+  coord_cartesian() +
+  labs(y = "Snag longevity (Years)",
+    col = "Treatment",
+    fill = "Treatment",
+    shape = "Treatment"
+  ) +
+  theme(legend.position = "none")
+ggsave(filename = "SBS_snag_long.png",width = 7.91, height = 5.61,
+       path = file.path(out_path), device='png', dpi=1200)
+
+ggplot()+
+  geom_boxplot(aes(y = TimeAsSnag, x = Treatment, fill = as.character(Treatment)),
+               data = dc_snagTime)+
+  theme_minimal()+
+  scale_fill_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  ) +
+  scale_x_discrete(
+    labels = c("NH" = "No harvest", "LR" = "High retention", 
+               "HR" = "Medium retention", "CC" = "No retention")
+  ) +
+  ylim(c(0,100))+
+  coord_cartesian() +
+  labs(y = "Snag longevity (Years)",
+       col = "Treatment",
+       fill = "Treatment",
+       shape = "Treatment"
+  ) +
+  theme(legend.position = "none",
+        text = element_text(family = "Arial"),  # Change "Arial" to your desired font
+        plot.title = element_text(size = 14, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text = element_text(size = 14, face = "bold"),
+        legend.text = element_text(size = 14, face = "bold"),
+        strip.text = element_text(size = 14, face = "bold"),
+        legend.title = element_text(size = 14, face = "bold")
+        )
+ggsave(filename = "ICH_snag_long.png",width = 7.91, height = 5.61,
+       path = file.path(out_path), device='png', dpi=1200)
+
+
+#Snag recruitment -------------------------------------
+ggplot(sl_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Treatment))+
+  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = Treatment, 
+                  fill = Treatment),size=1.5)+
+  theme_minimal()+
+  scale_color_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  labs(y = "Snag Recruitment Rate (%)",
+       x = "time since harvest",
+       col = "Treatment",
+       fill = "Treatment",
+       shape = "Treatment"
+  ) +
+  ylim(c(0,5))+
+  theme(legend.position = "bottom",
+        text = element_text(family = "Arial"),  # Change "Arial" to your desired font
+        plot.title = element_text(size = 14, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text = element_text(size = 14, face = "bold"),
+        legend.text = element_text(size = 14, face = "bold"),
+        strip.text = element_text(size = 14, face = "bold"),
+        legend.title = element_text(size = 14, face = "bold")
+  )
+ggsave(filename = "SBS_snag_recruit.png",width = 7.91, height = 5.61,
+       path = file.path(out_path), device='png', dpi=1200)
+
+
+ggplot(dc_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Treatment))+
+  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = Treatment, 
+                  fill = Treatment),size=1.5)+
+  theme_minimal()+
+  scale_fill_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  )+
+  scale_color_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  ) +
+  labs(y = "Snag Recruitment Rate (%)",
+       x = "time since harvest",
+       col = "Treatment",
+       fill = "Treatment",
+       shape = "Treatment"
+  ) +
+  ylim(c(0,5))+
+  theme(legend.position = "bottom",
+        text = element_text(family = "Arial"),  # Change "Arial" to your desired font
+        plot.title = element_text(size = 14, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text = element_text(size = 14, face = "bold"),
+        legend.text = element_text(size = 14, face = "bold"),
+        strip.text = element_text(size = 14, face = "bold"),
+        legend.title = element_text(size = 14, face = "bold")
+  )
+ggsave(filename = "ICH_snag_recruit.png",width = 7.91, height = 5.61,
+       path = file.path(out_path), device='png', dpi=1200)
+
+
+# Snag fall rate -------------------------
+ggplot(sl_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = Treatment))+
+  geom_smooth(aes(x = timestep, y = SnagFallRate, colour = Treatment, 
+                  fill = Treatment),size=1.5)+
+  theme_minimal()+
+  scale_color_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  ylim(c(0,50))+
+  labs(y = "Snag Fall Rate (%)",
+       x = "time since harvest",
+       col = "Treatment",
+       fill = "Treatment",
+       shape = "Treatment"
+  ) +
+  theme(legend.position = "bottom",
+        text = element_text(family = "Arial"),  # Change "Arial" to your desired font
+        plot.title = element_text(size = 14, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text = element_text(size = 14, face = "bold"),
+        legend.text = element_text(size = 14, face = "bold"),
+        strip.text = element_text(size = 14, face = "bold"),
+        legend.title = element_text(size = 14, face = "bold")
+  )
+ggsave(filename = "SBS_snag_fall rate.png",width = 7.91, height = 5.61,
+       path = file.path(out_path), device='png', dpi=1200)
+
+
+ggplot(dc_ad_sn)+
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = Treatment))+
+  geom_smooth(aes(x = timestep, y = SnagFallRate, colour = Treatment, 
+                  fill = Treatment),size=1.5)+
+  theme_minimal()+
+  scale_fill_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  )+
+  scale_color_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  ) +
+  labs(y = "Snag Fall Rate (%)",
+       x = "time since harvest",
+       col = "Treatment",
+       fill = "Treatment",
+       shape = "Treatment"
+  ) +
+  ylim(c(0,50))+
+  theme(legend.position = "bottom",
+        text = element_text(family = "Arial"),  # Change "Arial" to your desired font
+        plot.title = element_text(size = 14, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text = element_text(size = 14, face = "bold"),
+        legend.text = element_text(size = 14, face = "bold"),
+        strip.text = element_text(size = 14, face = "bold"),
+        legend.title = element_text(size = 14, face = "bold")
+  )
+ggsave(filename = "ICH_snag_fall rate.png",
+       path = file.path(out_path), device='png', dpi=1200)
+
+
+# Figures by species --------------------------------------------------
+snag_time_sp <- rbind(sl_snagTime_sp,dc_snagTime_sp)
+snag_time_sp[,.N, by = .(Treatment)]
+
+sl_snagTime_sp[, Treatment := factor(Treatment, levels = c("light/no", "med", "heavy"))]
+dc_snagTime_sp[, Treatment := factor(Treatment, levels = c("NH","LR", "HR", "CC"))]
+
+theme_set(theme_minimal(base_family = "Arial") +  # Change "Arial" to your desired font
+            theme(
+              text = element_text(family = "Arial"),  # Change "Arial" to your desired font
+              plot.title = element_text(size = 14, face = "bold"),
+              axis.title = element_text(size = 14, face = "bold"),
+              axis.text = element_text(size = 10, face = "bold"),
+              legend.text = element_text(size = 14, face = "bold"),
+              strip.text = element_text(size = 14, face = "bold"),
+              legend.title = element_text(size = 14, face = "bold")
+            ))
+
+# Snag longevity ---------
+ggplot()+
+  geom_boxplot(aes(y = TimeAsSnag, x = Treatment, fill = as.character(Treatment)),
+               data = sl_snagTime_sp[Species == "Interior_Spruce"|Species == "Subalpine_Fir"])+
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("Low retention", "Medium retention", "High retention")
+  ) +
+  scale_x_discrete(
+    labels = c("heavy" = "Low retention", "med" = "Medium retention", "light/no" = "High retention")
+  ) +
+  ylim(c(0,100))+
+  coord_cartesian() +
+  labs(y = "Snag longevity (Years)",
+       col = "Treatment",
+       fill = "Treatment",
+       shape = "Treatment"
+  ) +
+  facet_wrap(~recode(Species, 
+                     "Interior_Spruce" = "Hybrid spruce",
+                     "Subalpine_Fir" = "Subalpine fir"))+
+  theme(legend.position = "none")
+ggsave(filename = "SBS_snag_long_sp.png",width = 7.91, height = 5.61,
+       path = file.path(out_path), device='png', dpi=1200)
+
+ggplot() +
+  geom_boxplot(aes(y = TimeAsSnag, x = Species, fill = Species),
+               data = sl_snagTime_sp[Species %in% c("Interior_Spruce", "Subalpine_Fir")]) +
+  scale_fill_manual(
+    values = c(
+      "Interior_Spruce" = "#6C4191",
+      "Subalpine_Fir" = "#66BBBB"
+    ),
+    labels = c(
+      "Interior_Spruce" = "Hybrid spruce",
+      "Subalpine_Fir" = "Subalpine fir"
+    )
+  ) +
+  scale_x_discrete(
+    labels = c(
+      "Interior_Spruce" = "Hybrid spruce",
+      "Subalpine_Fir" = "Subalpine fir"
+    )
+  ) +
+  ylim(c(0, 100)) +
+  coord_cartesian() +
+  labs(y = "Snag longevity (Years)",
+       x = "Species",
+       fill = "Species") +
+  facet_wrap(~Treatment, labeller = as_labeller(c(
+    "light/no" = "High retention",
+    "med" = "Medium retention",
+    "heavy" = "Low retention"
+  ))) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    text = element_text(family = "Arial"),
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold"),
+    strip.text = element_text(size = 14, face = "bold")
+  )
+ggsave(filename = "SBS_snag_long_sp_opt2.png",width = 7.91, height = 5.61,
+       path = file.path(out_path), device='png', dpi=1200)
+
+
+sp_incl <- c("Western_Hemlock","Western_redcedar","Hybrid_spruce","Amabalis_Fir",
+             "Lodgepole_Pine")
+ggplot()+
+  geom_boxplot(aes(y = TimeAsSnag, x = Treatment, fill = as.character(Treatment)),
+               data = dc_snagTime_sp[Species %in% sp_incl])+
+  theme_minimal()+
+  scale_fill_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  ) +
+  scale_x_discrete(
+    labels = c("NH" = "No harvest", "LR" = "High retention", 
+               "HR" = "Medium retention", "CC" = "No retention")
+  ) +
+  ylim(c(0,100))+
+  coord_cartesian() +
+  labs(y = "Snag longevity (Years)",
+       col = "Treatment",
+       fill = "Treatment",
+       shape = "Treatment"
+  ) +
+ facet_wrap(c("Species"), labeller = as_labeller(c("Amabalis_Fir" = "Amabilis fir",
+                                                  "Western_redcedar" = "Western cedar",
+                                                  "Lodgepole_Pine" = "Lodgepole pine",
+                                                  "Hybrid_spruce" = "Hybrid spruce",
+                                                  "Western_Hemlock" = "Western hemlock")))+
+  theme(legend.position = "none",
+        text = element_text(family = "Arial"),  # Change "Arial" to your desired font
+        plot.title = element_text(size = 14, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text = element_text(size = 12, face = "bold"),
+        axis.text.x = element_text(angle = 45, hjust = 1),
+        legend.text = element_text(size = 14, face = "bold"),
+        strip.text = element_text(size = 14, face = "bold"),
+        legend.title = element_text(size = 14, face = "bold")
+  )
+ggsave(filename = "ICH_snag_long_sp.png",width = 7.91, height = 5.61,
+       path = file.path(out_path), device='png', dpi=1200)
+
+ggplot() +
+  geom_boxplot(aes(y = TimeAsSnag, x = Species, fill = Species),
+               data = dc_snagTime_sp[Species %in% sp_incl]) +
+  theme_minimal() +
+  scale_fill_manual(
+    values = c(
+      "Amabalis_Fir" = "#F0C808",
+      "Western_redcedar" = "#6C4191",
+      "Lodgepole_Pine" = "#66BBBB",
+      "Hybrid_spruce" = "#DD4444",
+      "Western_Hemlock" = "#228B22"
+    ),
+    labels = c(
+      "Amabalis_Fir" = "Amabilis fir",
+      "Western_redcedar" = "Western cedar",
+      "Lodgepole_Pine" = "Lodgepole pine",
+      "Hybrid_spruce" = "Hybrid spruce",
+      "Western_Hemlock" = "Western hemlock"
+    )
+  ) +
+  scale_x_discrete(
+    labels = c(
+      "Amabalis_Fir" = "Amabilis fir",
+      "Western_redcedar" = "Western cedar",
+      "Lodgepole_Pine" = "Lodgepole pine",
+      "Hybrid_spruce" = "Hybrid spruce",
+      "Western_Hemlock" = "Western hemlock"
+    )
+  ) +
+  ylim(c(0, 100)) +
+  coord_cartesian() +
+  labs(y = "Snag longevity (Years)",
+       x = "Species",
+       fill = "Species") +
+  facet_wrap(~Treatment, labeller = as_labeller(c(
+    "NH" = "No harvest",
+    "LR" = "High retention",
+    "HR" = "Medium retention",
+    "CC" = "No retention"
+  ))) +
+  theme(
+    legend.position = "nons",
+    text = element_text(family = "Arial"),
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 12, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    legend.text = element_text(size = 12, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold"),
+    strip.text = element_text(size = 14, face = "bold")
+  )
+ggsave(filename = "ICH_snag_long_sp_opt2.png",width = 7.91, height = 5.61,
+       path = file.path(out_path), device='png', dpi=1200)
+
+#Snag recruitment -------------------------------------
+ggplot(sl_ad_sn_sp[Species == "Interior_Spruce"|Species == "Subalpine_Fir"])+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Treatment))+
+  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = Treatment, 
+                  fill = Treatment),size=1.5)+
+  theme_minimal()+
+  scale_color_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  labs(y = "Snag Recruitment Rate (%)",
+       x = "time since harvest",
+       col = "Treatment",
+       fill = "Treatment",
+       shape = "Treatment"
+  ) +
+  ylim(c(0,2))+
+  facet_wrap(~recode(Species, 
+                     "Interior_Spruce" = "Hybrid spruce",
+                     "Subalpine_Fir" = "Subalpine fir"))+
+  theme(legend.position = "bottom",
+        text = element_text(family = "Arial"),  # Change "Arial" to your desired font
+        plot.title = element_text(size = 14, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text = element_text(size = 14, face = "bold"),
+        legend.text = element_text(size = 14, face = "bold"),
+        strip.text = element_text(size = 14, face = "bold"),
+        legend.title = element_text(size = 14, face = "bold")
+  )
+ggsave(filename = "SBS_snag_recruit_sp.png",width = 7.91, height = 5.61,
+       path = file.path(out_path), device='png', dpi=1200)
+
+sp_incl <- c("Western_Hemlock","Western_redcedar","Hybrid_spruce","Amabalis_Fir",
+             "Lodgepole_Pine")
+ggplot(dc_ad_sn_sp[Species %in% sp_incl])+
+  geom_point(aes(x = timestep, y = SnagRecrRate, colour = Treatment))+
+  geom_smooth(aes(x = timestep, y = SnagRecrRate, colour = Treatment, 
+                  fill = Treatment),size=1.5)+
+  theme_minimal()+
+  scale_fill_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  )+
+  scale_color_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  ) +
+  labs(y = "Snag Recruitment Rate (%)",
+       x = "time since harvest",
+       col = "Treatment",
+       fill = "Treatment",
+       shape = "Treatment"
+  ) +
+  facet_wrap(c("Species"), labeller = as_labeller(c("Amabalis_Fir" = "Amabilis fir",
+                                                    "Western_redcedar" = "Western cedar",
+                                                    "Lodgepole_Pine" = "Lodgepole pine",
+                                                    "Hybrid_spruce" = "Hybrid spruce",
+                                                    "Western_Hemlock" = "Western hemlock")))+
+  ylim(c(0,100))+
+  theme(legend.position = "bottom",
+        text = element_text(family = "Arial"),  # Change "Arial" to your desired font
+        plot.title = element_text(size = 14, face = "bold"),
+        axis.title = element_text(size = 14, face = "bold"),
+        axis.text = element_text(size = 14, face = "bold"),
+        legend.text = element_text(size = 14, face = "bold"),
+        strip.text = element_text(size = 14, face = "bold"),
+        legend.title = element_text(size = 14, face = "bold")
+  )
+ggsave(filename = "ICH_snag_recruit_sp.png",width = 7.91, height = 5.61,
+       path = file.path(out_path), device='png', dpi=1200)
+
+
+# Snag fall rate -------------------------
+ggplot(sl_ad_sn_sp[Species %in% c("Interior_Spruce", "Subalpine_Fir")]) +
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = Treatment)) +
+  geom_smooth(aes(x = timestep, y = SnagFallRate, colour = Treatment, 
+                  fill = Treatment), size = 1.5) +
+  theme_minimal() +
+  scale_color_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  ylim(c(0, 100)) +
+  labs(y = "Snag Fall Rate (%)",
+       x = "time since harvest",
+       col = "Treatment",
+       fill = "Treatment",
+       shape = "Treatment") +
+  facet_wrap(~recode(Species, 
+                     "Interior_Spruce" = "Hybrid spruce",
+                     "Subalpine_Fir" = "Subalpine fir")) +
+  theme(
+    legend.position = "bottom",
+    text = element_text(family = "Arial"),
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 14, face = "bold"),
+    legend.text = element_text(size = 14, face = "bold"),
+    strip.text = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+  )
+ggsave(filename = "SBS_snag_fall rate.png",width = 7.91, height = 5.61,
+       path = file.path(out_path), device='png', dpi=1200)
+
+
+ggplot(dc_ad_sn_sp[Species %in% c("Amabalis_Fir", "Western_redcedar", "Lodgepole_Pine", "Hybrid_spruce", "Western_Hemlock")]) +
+  geom_point(aes(x = timestep, y = SnagFallRate, colour = Treatment)) +
+  geom_smooth(aes(x = timestep, y = SnagFallRate, colour = Treatment, 
+                  fill = Treatment), size = 1.5) +
+  theme_minimal() +
+  scale_fill_manual(
+    values = c("#F0C808", "#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH", "LR", "HR", "CC"),
+    labels = c("No harvest", "High retention", "Medium retention", "No retention")
+  ) +
+  scale_color_manual(
+    values = c("#F0C808", "#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH", "LR", "HR", "CC"),
+    labels = c("No harvest", "High retention", "Medium retention", "No retention")
+  ) +
+  labs(
+    y = "Snag Fall Rate (%)",
+    x = "time since harvest",
+    col = "Treatment",
+    fill = "Treatment",
+    shape = "Treatment"
+  ) +
+  ylim(c(0, 100)) +
+  facet_wrap(~recode(Species,
+                     "Amabalis_Fir" = "Amabilis fir",
+                     "Western_redcedar" = "Western cedar",
+                     "Lodgepole_Pine" = "Lodgepole pine",
+                     "Hybrid_spruce" = "Hybrid spruce",
+                     "Western_Hemlock" = "Western hemlock")) +
+  theme(
+    legend.position = "bottom",
+    text = element_text(family = "Arial"),
+    plot.title = element_text(size = 14, face = "bold"),
+    axis.title = element_text(size = 14, face = "bold"),
+    axis.text = element_text(size = 14, face = "bold"),
+    legend.text = element_text(size = 14, face = "bold"),
+    strip.text = element_text(size = 14, face = "bold"),
+    legend.title = element_text(size = 14, face = "bold")
+  )
+ggsave(filename = "ICH_snag_fall rate_sp.png",
+       path = file.path(out_path), device='png', dpi=1200)
+
+
+
+
+
+
+
+##Erica section of code
+
+sl_snagTime_sp$SizeClass <-
+  ifelse(sl_snagTime_sp$DBH < 25, "Small", "Large")
+
+dc_snagTime_sp$SizeClass <-
+  ifelse(dc_snagTime_sp$DBH < 25, "Small", "Large")
+
+
+
+#Summit Lake data Treatment wasn't a factor and getting plotted in different order than date creek, so adjusting this
+
+
+
+sl_snagTime_sp$Treatment <- as.factor(sl_snagTime_sp$Treatment)
+
+sl_snagTime_sp$Treatment <-
+  factor(sl_snagTime_sp$Treatment, levels = c("light/no", "med", "heavy"))
+
+
+
+#SUMMIT LAKE FIGURES
+
+#Figure showing overlap in snag longevity is nearly perfect among treatments
+
+ggplot(aes(
+  x = TimeAsSnag,
+  group =  c(Treatment),
+  fill = as.character(Treatment)
+),
+
+data = sl_snagTime_sp[Species == "Interior_Spruce" |
+                        Species == "Subalpine_Fir"]) +
+  
+  geom_density(adjust = 1.5) +
+  
+  scale_x_log10() +
+  
+  #scale_x_continuous(trans="log10")+
+  
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("light/no", "med", "heavy"),
+    
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  
+  facet_wrap(
+    ~ recode(
+      Species,
+      
+      "Interior_Spruce" = "Hybrid spruce",
+      
+      "Subalpine_Fir" = "Subalpine fir"
+    ) + SizeClass,
+    ncol = 4
+  ) +
+  
+  geom_segment(data = sl_snagTime_sp[Species == "Interior_Spruce" |
+                                       Species == "Subalpine_Fir"],
+               aes(
+                 y = 0,
+                 yend = .05,
+                 x = mean(TimeAsSnag),
+                 xend = mean(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  coord_flip() +
+  
+  scale_y_reverse() +
+  
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+
+
+
+#####
+
+#### large and small opposite axes
+
+####
+
+p_Sx_Sm <-
+  ggplot(aes(x = TimeAsSnag, group =  Treatment, fill = Treatment),
+         
+         data = sl_snagTime_sp[Species == "Interior_Spruce" &
+                                 SizeClass == "Small"]) +
+  
+  geom_density(adjust = 1.5, alpha = 0.6) +
+  
+  scale_x_log10(limits = c(1, 80), breaks = c(1, 3, 10, 30, 80)) +
+  
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("light/no", "med", "heavy"),
+    
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  
+  geom_segment(data = sl_snagTime_sp[Species == "Interior_Spruce" &
+                                       SizeClass == "Small"],
+               
+               aes(
+                 y = 0,
+                 yend = 1,
+                 x = mean(TimeAsSnag),
+                 xend = mean(TimeAsSnag)
+               ),
+               lty = 2) +
+  
+  geom_segment(data = sl_snagTime_sp[Species == "Interior_Spruce" &
+                                       SizeClass == "Small"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.65,
+                 x = mean(TimeAsSnag) + sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) + sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  geom_segment(data = sl_snagTime_sp[Species == "Interior_Spruce" &
+                                       SizeClass == "Small"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.2,
+                 x = mean(TimeAsSnag) - sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) - sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  coord_flip(ylim = c(1.2, 0)) +
+  
+  scale_y_reverse() +
+  
+  labs(x = "Snag longevity (years)", y = "DBH < 25") +
+  
+  theme(
+    legend.position = "bottom",
+    legend.justification.bottom = "left",
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank(),
+    
+    legend.text = element_text(size = 12, face = "bold"),
+    
+    legend.title = element_text(size = 12, face = "bold")
+  )
+
+
+
+
+
+p_Sx_Lg <-
+  ggplot(aes(x = TimeAsSnag, group =  Treatment, fill = Treatment),
+         
+         data = sl_snagTime_sp[Species == "Interior_Spruce" &
+                                 SizeClass == "Large"]) +
+  
+  geom_density(adjust = 1.5, alpha = 0.6) +
+  
+  scale_x_log10(limits = c(1, 80), breaks = c(1, 3, 10, 30, 80)) +
+  
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("light/no", "med", "heavy"),
+    
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  
+  geom_segment(data = sl_snagTime_sp[Species == "Interior_Spruce" &
+                                       SizeClass == "Large"],
+               
+               aes(
+                 y = 0,
+                 yend = 1,
+                 x = mean(TimeAsSnag),
+                 xend = mean(TimeAsSnag)
+               ),
+               lty = 2) +
+  
+  geom_segment(data = sl_snagTime_sp[Species == "Interior_Spruce" &
+                                       SizeClass == "Large"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.75,
+                 x = mean(TimeAsSnag) + sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) + sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  geom_segment(data = sl_snagTime_sp[Species == "Interior_Spruce" &
+                                       SizeClass == "Large"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.4,
+                 x = mean(TimeAsSnag) - sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) - sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  coord_flip(ylim = c(0, 1.2)) +
+  
+  #scale_y_reverse()+
+  
+  ggtitle('Interior Spruce') +
+  
+  labs(y = "DBH >25") +
+  
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank()
+  )
+
+
+
+
+
+p_Bl_Sm <-
+  ggplot(aes(x = TimeAsSnag, group =  Treatment, fill = Treatment),
+         
+         data = sl_snagTime_sp[Species == "Subalpine_Fir" &
+                                 SizeClass == "Small"]) +
+  
+  geom_density(adjust = 1.5, alpha = 0.6) +
+  
+  scale_x_log10(limits = c(1, 80), breaks = c(1, 3, 10, 30, 80)) +
+  
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("light/no", "med", "heavy"),
+    
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  
+  geom_segment(data = sl_snagTime_sp[Species == "Subalpine_Fir" &
+                                       SizeClass == "Small"],
+               
+               aes(
+                 y = 0,
+                 yend = 1,
+                 x = mean(TimeAsSnag),
+                 xend = mean(TimeAsSnag)
+               ),
+               lty = 2) +
+  
+  geom_segment(data = sl_snagTime_sp[Species == "Subalpine_Fir" &
+                                       SizeClass == "Small"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.75,
+                 x = mean(TimeAsSnag) + sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) + sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  geom_segment(data = sl_snagTime_sp[Species == "Subalpine_Fir" &
+                                       SizeClass == "Small"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.4,
+                 x = mean(TimeAsSnag) - sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) - sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  coord_flip(ylim = c(1.2, 0)) +
+  
+  scale_y_reverse() +
+  
+  labs(y = "DBH < 25") +
+  
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.y = element_blank()
+  )
+
+
+
+p_Bl_Lg <-
+  ggplot(aes(x = TimeAsSnag, group =  Treatment, fill = Treatment),
+         
+         data = sl_snagTime_sp[Species == "Subalpine_Fir" &
+                                 SizeClass == "Large"]) +
+  
+  geom_density(adjust = 1.5, alpha = 0.6) +
+  
+  ggtitle('Subalpine Fir') +
+  
+  scale_x_log10(limits = c(1, 80), breaks = c(1, 3, 10, 30, 80)) +
+  
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("light/no", "med", "heavy"),
+    
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  
+  geom_segment(data = sl_snagTime_sp[Species == "Subalpine_Fir" &
+                                       SizeClass == "Large"],
+               
+               aes(
+                 y = 0,
+                 yend = 1,
+                 x = mean(TimeAsSnag),
+                 xend = mean(TimeAsSnag)
+               ),
+               lty = 2) +
+  
+  geom_segment(data = sl_snagTime_sp[Species == "Subalpine_Fir" &
+                                       SizeClass == "Large"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.75,
+                 x = mean(TimeAsSnag) + sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) + sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  geom_segment(data = sl_snagTime_sp[Species == "Subalpine_Fir" &
+                                       SizeClass == "Large"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.4,
+                 x = mean(TimeAsSnag) - sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) - sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  coord_flip(ylim = c(0, 1.2)) +
+  
+  #scale_y_reverse()+
+  
+  labs(y = "DBH >25") +
+  
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank()
+  )
+
+
+
+#devtools::install_github("thomasp85/patchwork")
+
+library(patchwork)
+
+patchwork <- p_Sx_Sm | p_Sx_Lg |  p_Bl_Sm |  p_Bl_Lg
+
+patchwork
+
+ggsave(
+  filename = "SBS_snag_long_sp_size.png",
+  width = 7.91,
+  height = 5.61,
+  
+  path = file.path(out_path),
+  device = 'png',
+  dpi = 1200
+)
+
+
+
+
+
+#calculate snag longevity by snag decay class
+
+#Snag decay class code is lost the year the snag is tagged to fall, so must find
+
+#decay class from previous year
+
+fallIDs_sl <-
+  unique(sl_out_as[state_type == "SnFallNext" |
+                     state_type == "SnagCreate&Fall"]$UniqXY)
+
+
+
+decay_class_summary <-
+  sl_out_as[UniqXY %in% fallIDs_sl & is.na(SnagDecayClass) == FALSE,
+            
+            .(Treatment,
+              Unit,
+              Species,
+              DBH,
+              UniqXY,
+              SnagDecayClass,
+              TimeAsSnag)] %>%
+  
+  group_by(UniqXY) %>% summarise(DecayClass_max = max(SnagDecayClass, na.rm = TRUE))
+
+
+
+sl_snagTime_sp_decay <-
+  sl_out_as[UniqXY %in% fallIDs_sl & state_type == "SnFallNext" |
+              
+              UniqXY %in% fallIDs_sl &
+              state_type == "SnagCreate&Fall",
+            
+            .(Treatment, Unit, Species, DBH, UniqXY, TimeAsSnag)]
+
+sl_snagTime_sp_decay <-
+  merge(sl_snagTime_sp_decay,
+        decay_class_summary,
+        by = "UniqXY",
+        all.x = TRUE)
+
+
+
+sl_snagTime_sp_decay$SizeClass <-
+  ifelse(sl_snagTime_sp_decay$DBH < 25, "Small", "Large")
+
+
+
+#Figure showing decay class differences in snag longevity
+
+
+
+ggplot(aes(
+  x = TimeAsSnag,
+  group =  c(DecayClass_max),
+  fill = as.character(DecayClass_max)
+),
+
+data = sl_snagTime_sp_decay[Species == "Interior_Spruce" |
+                              Species == "Subalpine_Fir"]) +
+  
+  geom_density(adjust = 1.5, alpha = 0.8) +
+  
+  scale_x_log10(limits = c(1, 80), breaks = c(1, 3, 10, 30, 80)) +
+  
+  facet_wrap(
+    ~ recode(
+      Species,
+      
+      "Interior_Spruce" = "Hybrid spruce",
+      
+      "Subalpine_Fir" = "Subalpine fir"
+    ),
+    ncol = 2
+  ) +
+  
+  coord_flip() +
+  
+  scale_y_reverse() +
+  
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+
+
+
+#boxplot version
+
+ggplot() +
+  
+  geom_boxplot(aes(
+    y = TimeAsSnag,
+    x = DecayClass_max,
+    fill = as.character(DecayClass_max)
+  ),
+  
+  data = sl_snagTime_sp_decay[Species == "Interior_Spruce" |
+                                Species == "Subalpine_Fir"]) +
+  
+  scale_x_log10(limits = c(1, 80), breaks = c(1, 3, 10, 30, 80)) +
+  
+  facet_wrap(
+    ~ recode(
+      Species,
+      
+      "Interior_Spruce" = "Hybrid spruce",
+      
+      "Subalpine_Fir" = "Subalpine fir"
+    ),
+    ncol = 2
+  ) +
+  
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+
+
+
+#individual figures by species to add to overall figure
+
+Sx_decay <- ggplot() +
+  
+  geom_boxplot(aes(
+    y = TimeAsSnag,
+    x = DecayClass_max,
+    fill = as.character(DecayClass_max)
+  ),
+  
+  data = sl_snagTime_sp_decay[Species == "Interior_Spruce"]) +
+  
+  scale_fill_manual(values = c("gray24", "gray47", "gray58", "gray80", "gray90")) +
+  
+  scale_y_log10(limits = c(1, 80), breaks = c(1, 3, 10, 30, 80)) +
+  
+  labs(x = "Decay class") +
+  
+  theme(
+    legend.position = "none",
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+Sx_decay
+
+
+
+Bl_decay <- ggplot() +
+  
+  geom_boxplot(aes(
+    y = TimeAsSnag,
+    x = DecayClass_max,
+    fill = as.character(DecayClass_max)
+  ),
+  
+  data = sl_snagTime_sp_decay[Species == "Subalpine_Fir"]) +
+  
+  scale_fill_manual(values = c("gray24", "gray47", "gray58", "gray80", "gray90")) +
+  
+  scale_y_log10(limits = c(1, 80), breaks = c(1, 3, 10, 30, 80)) +
+  
+  labs(x = "Decay class") +
+  
+  theme(
+    legend.position = "none",
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+Bl_decay
+
+
+
+patchwork2 <-
+  p_Sx_Sm | p_Sx_Lg | Sx_decay |  p_Bl_Sm |  p_Bl_Lg | Bl_decay
+
+patchwork2
+
+ggsave(
+  filename = "SBS_snag_long_sp_size_decay.png",
+  width = 7.91,
+  height = 5.61,
+  
+  path = file.path(out_path),
+  device = 'png',
+  dpi = 1200
+)
+
+
+
+
+
+#DATE CREEK FIGURES
+
+#Figure showing overlap in snag longevity is nearly perfect among treatments
+
+ggplot(aes(
+  x = TimeAsSnag,
+  group =  c(Treatment),
+  fill = as.character(Treatment)
+),
+
+data = dc_snagTime_sp[Species == "Western_Hemlock" |
+                        Species == "Western_redcedar"]) +
+  
+  geom_density(adjust = 1.5) +
+  
+  scale_x_log10() +
+  
+  #scale_x_continuous(trans="log10")+
+  
+  #scale_fill_manual(
+  
+  #  values = c("#6C4191", "#66BBBB", "#DD4444"),
+  
+  #  breaks = c("light/no", "med", "heavy"),
+  
+  #  labels = c("Low retention", "Medium retention", "High retention") ) +
+  
+facet_wrap(
+  ~ recode(
+    Species,
+    
+    "Western_Hemlock" = "Western hemlock",
+    
+    "Western_redcedar" = "Western redcedar"
+  ) + SizeClass,
+  ncol = 4
+) +
+  
+  #geom_segment(data=sl_snagTime_sp[Species == "Interior_Spruce"|Species == "Subalpine_Fir"], aes(y=0,yend=.05, x=mean(TimeAsSnag), xend=mean(TimeAsSnag)), lty="21")+
+  
+  coord_flip() +
+  
+  scale_y_reverse() +
+  
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank()
+  )
+
+
+
+#####
+
+#### large and small opposite axes
+
+####
+
+p_Hw_Sm <-
+  ggplot(aes(x = TimeAsSnag, group =  Treatment, fill = Treatment),
+         
+         data = dc_snagTime_sp[Species == "Western_Hemlock" &
+                                 SizeClass == "Small"]) +
+  
+  geom_density(adjust = 1.5, alpha = 0.6) +
+  
+  scale_x_log10(limits = c(1, 110), breaks = c(1, 3, 10, 30, 110)) +
+  
+  scale_fill_manual(
+    values = c("#F0C808", "#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("NH", "LR", "HR", "CC"),
+    
+    labels = c(
+      "No harvest",
+      "High retention",
+      "Medium retention",
+      "No retention"
+    )
+  ) +
+  
+  geom_segment(data = dc_snagTime_sp[Species == "Western_Hemlock" &
+                                       SizeClass == "Small"],
+               
+               aes(
+                 y = 0,
+                 yend = 1.2,
+                 x = mean(TimeAsSnag),
+                 xend = mean(TimeAsSnag)
+               ),
+               lty = 2) +
+  
+  geom_segment(data = dc_snagTime_sp[Species == "Western_Hemlock" &
+                                       SizeClass == "Small"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.65,
+                 x = mean(TimeAsSnag) + sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) + sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  geom_segment(data = dc_snagTime_sp[Species == "Western_Hemlock" &
+                                       SizeClass == "Small"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.4,
+                 x = mean(TimeAsSnag) - sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) - sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  coord_flip(ylim = c(1.2, 0)) +
+  
+  scale_y_reverse() +
+  
+  labs(x = "Snag longevity (years)", y = "DBH < 25") +
+  
+  theme(
+    legend.position = "bottom",
+    legend.justification.bottom = "left",
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank(),
+    
+    legend.text = element_text(size = 12, face = "bold"),
+    
+    legend.title = element_text(size = 12, face = "bold")
+  )
+
+p_Hw_Sm
+
+
+
+p_Hw_Lg <-
+  ggplot(aes(x = TimeAsSnag, group =  Treatment, fill = Treatment),
+         
+         data = dc_snagTime_sp[Species == "Western_Hemlock" &
+                                 SizeClass == "Large"]) +
+  
+  geom_density(adjust = 1.5, alpha = 0.6) +
+  
+  scale_x_log10(limits = c(1, 80), breaks = c(1, 3, 10, 30, 80)) +
+  
+  scale_fill_manual(
+    values = c("#F0C808", "#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("NH", "LR", "HR", "CC"),
+    
+    labels = c(
+      "No harvest",
+      "High retention",
+      "Medium retention",
+      "No retention"
+    )
+  ) +
+  
+  geom_segment(data = dc_snagTime_sp[Species == "Western_Hemlock" &
+                                       SizeClass == "Large"],
+               
+               aes(
+                 y = 0,
+                 yend = 1,
+                 x = mean(TimeAsSnag),
+                 xend = mean(TimeAsSnag)
+               ),
+               lty = 2) +
+  
+  geom_segment(data = dc_snagTime_sp[Species == "Western_Hemlock" &
+                                       SizeClass == "Large"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.7,
+                 x = mean(TimeAsSnag) + sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) + sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  geom_segment(data = dc_snagTime_sp[Species == "Western_Hemlock" &
+                                       SizeClass == "Large"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.35,
+                 x = mean(TimeAsSnag) - sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) - sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  coord_flip(ylim = c(0, 1.2)) +
+  
+  #scale_y_reverse()+
+  
+  ggtitle('Western hemlock') +
+  
+  labs(y = "DBH >25") +
+  
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank()
+  )
+
+p_Hw_Lg
+
+
+
+p_Cw_Sm <-
+  ggplot(aes(x = TimeAsSnag, group =  Treatment, fill = Treatment),
+         
+         data = dc_snagTime_sp[Species == "Western_redcedar" &
+                                 SizeClass == "Small"]) +
+  
+  geom_density(adjust = 1.5, alpha = 0.6) +
+  
+  scale_x_log10(limits = c(1, 80), breaks = c(1, 3, 10, 30, 80)) +
+  
+  scale_fill_manual(
+    values = c("#F0C808", "#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("NH", "LR", "HR", "CC"),
+    
+    labels = c(
+      "No harvest",
+      "High retention",
+      "Medium retention",
+      "No retention"
+    )
+  ) +
+  
+  geom_segment(data = dc_snagTime_sp[Species == "Western_redcedar" &
+                                       SizeClass == "Small"],
+               
+               aes(
+                 y = 0,
+                 yend = 1,
+                 x = mean(TimeAsSnag),
+                 xend = mean(TimeAsSnag)
+               ),
+               lty = 2) +
+  
+  geom_segment(data = dc_snagTime_sp[Species == "Western_redcedar" &
+                                       SizeClass == "Small"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.75,
+                 x = mean(TimeAsSnag) + sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) + sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  geom_segment(data = dc_snagTime_sp[Species == "Western_redcedar" &
+                                       SizeClass == "Small"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.5,
+                 x = mean(TimeAsSnag) - sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) - sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  coord_flip(ylim = c(1.2, 0)) +
+  
+  scale_y_reverse() +
+  
+  labs(y = "DBH < 25") +
+  
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.title.y = element_blank()
+  )
+
+p_Cw_Sm
+
+
+
+p_Cw_Lg <-
+  ggplot(aes(x = TimeAsSnag, group =  Treatment, fill = Treatment),
+         
+         data = dc_snagTime_sp[Species == "Western_redcedar" &
+                                 SizeClass == "Large"]) +
+  
+  geom_density(adjust = 1.5, alpha = 0.6) +
+  
+  ggtitle('Western redcedar') +
+  
+  scale_x_log10(limits = c(1, 80), breaks = c(1, 3, 10, 30, 80)) +
+  
+  scale_fill_manual(
+    values = c("#F0C808", "#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("NH", "LR", "HR", "CC"),
+    
+    labels = c(
+      "No harvest",
+      "High retention",
+      "Medium retention",
+      "No retention"
+    )
+  ) +
+  
+  geom_segment(data = dc_snagTime_sp[Species == "Western_redcedar" &
+                                       SizeClass == "Large"],
+               
+               aes(
+                 y = 0,
+                 yend = 1,
+                 x = mean(TimeAsSnag),
+                 xend = mean(TimeAsSnag)
+               ),
+               lty = 2) +
+  
+  geom_segment(data = dc_snagTime_sp[Species == "Western_redcedar" &
+                                       SizeClass == "Large"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.75,
+                 x = mean(TimeAsSnag) + sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) + sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  geom_segment(data = dc_snagTime_sp[Species == "Western_redcedar" &
+                                       SizeClass == "Large"],
+               
+               aes(
+                 y = 0,
+                 yend = 0.4,
+                 x = mean(TimeAsSnag) - sd(TimeAsSnag),
+                 xend = mean(TimeAsSnag) - sd(TimeAsSnag)
+               ),
+               lty = "21") +
+  
+  coord_flip(ylim = c(0, 1.2)) +
+  
+  #scale_y_reverse()+
+  
+  labs(y = "DBH >25") +
+  
+  theme(
+    legend.position = "none",
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    axis.title.y = element_blank()
+  )
+
+p_Cw_Lg
+
+
+
+
+
+#calculate snag longevity by snag decay class
+
+#Snag decay class code is lost the year the snag is tagged to fall, so must find
+
+#decay class from previous year
+
+fallIDs_dc <-
+  unique(dc_out_as[state_type == "SnFallNext" |
+                     state_type == "SnagCreate&Fall"]$UniqXY)
+
+
+
+decay_class_summary_dc <-
+  dc_out_as[UniqXY %in% fallIDs_dc & is.na(SnagDecayClass) == FALSE,
+            
+            .(Treatment,
+              Unit,
+              Species,
+              DBH,
+              UniqXY,
+              SnagDecayClass,
+              TimeAsSnag)] %>%
+  
+  group_by(UniqXY) %>% summarise(DecayClass_max = max(SnagDecayClass, na.rm = TRUE))
+
+
+
+
+
+dc_snagTime_sp_decay <-
+  dc_out_as[UniqXY %in% fallIDs_dc & state_type == "SnFallNext" |
+              
+              UniqXY %in% fallIDs_dc &
+              state_type == "SnagCreate&Fall",
+            
+            .(Treatment, Unit, Species, DBH, UniqXY, TimeAsSnag)]
+
+dc_snagTime_sp_decay <-
+  merge(dc_snagTime_sp_decay,
+        decay_class_summary_dc,
+        by = "UniqXY",
+        all.x = TRUE)
+
+
+
+dc_snagTime_sp_decay$SizeClass <-
+  ifelse(dc_snagTime_sp_decay$DBH < 25, "Small", "Large")
+
+
+
+#Figure showing decay class differences in snag longevity - boxplot version
+
+#individual figures by species to add to overall figure
+
+Hw_decay <- ggplot() +
+  
+  geom_boxplot(aes(
+    y = TimeAsSnag,
+    x = DecayClass_max,
+    fill = as.character(DecayClass_max)
+  ),
+  
+  data = dc_snagTime_sp_decay[Species == "Western_Hemlock"]) +
+  
+  scale_fill_manual(values = c("gray24", "gray47", "gray58", "gray80", "gray90")) +
+  
+  scale_y_log10(limits = c(1, 110), breaks = c(1, 3, 10, 30, 110)) +
+  
+  labs(x = "Decay class") +
+  
+  theme(
+    legend.position = "none",
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+Hw_decay
+
+
+
+Cw_decay <- ggplot() +
+  
+  geom_boxplot(aes(
+    y = TimeAsSnag,
+    x = DecayClass_max,
+    fill = as.character(DecayClass_max)
+  ),
+  
+  data = dc_snagTime_sp_decay[Species == "Western_redcedar"]) +
+  
+  scale_fill_manual(values = c("gray24", "gray47", "gray58", "gray80", "gray90")) +
+  
+  scale_y_log10(limits = c(1, 110), breaks = c(1, 3, 10, 30, 110)) +
+  
+  labs(x = "Decay class") +
+  
+  theme(
+    legend.position = "none",
+    axis.title.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  )
+
+Cw_decay
+
+
+
+patchwork2 <-
+  p_Hw_Sm | p_Hw_Lg | Hw_decay |  p_Cw_Sm |  p_Cw_Lg | Cw_decay
+
+patchwork2
+
+ggsave(
+  filename = "ICH_snag_long_sp_size_decay.png",
+  width = 7.91,
+  height = 5.61,
+  
+  path = file.path(out_path),
+  device = 'png',
+  dpi = 1200
+)
+
+
+
+
+
+############
+
+###############
+
+##############
+
+
+
+#4. Calculate Snag creation and snag fall rate - by Species and size class
+
+
+
+#ICH
+
+dc_out_as$SizeClass <- ifelse(dc_out_as$DBH < 25, "Small", "Large")
+
+dc_adult.sc <-
+  dc_out_as[state_type == "Adult", .N, by = .(Treatment, Unit, timestep, Species, SizeClass)]
+
+setnames(dc_adult.sc, "N", "NumAdult")
+
+dc_snag.sc <-
+  dc_out_as[state_type == "Snag", .N, by = .(Treatment, Unit, timestep, Species, SizeClass)]
+
+setnames(dc_snag.sc, "N", "NumExistSnags")
+
+dc_snagcreate.sc <-
+  dc_out_as[state_type == "SnagCreate" | state_type == "SnagCreate&Fall",
+            
+            .N, by = .(Treatment, Unit, timestep, Species, SizeClass)]
+
+setnames(dc_snagcreate.sc, "N", "NumSnagCreate")
+
+dc_snagfall.sc <-
+  dc_out_as[state_type == "SnFallNext" | state_type == "SnagCreate&Fall",
+            
+            .N, by = .(Treatment, Unit, timestep, Species, SizeClass)]
+
+setnames(dc_snagfall.sc, "N", "NumSnagFall")
+
+dc_treefall.sc <- dc_out_as[state_type == "SnagCreate&Fall",
+                            
+                            .N, by = .(Treatment, Unit, timestep, Species, SizeClass)]
+
+setnames(dc_treefall.sc, "N", "NumTreeFall")
+
+
+
+dc_ad_sn_sp.sc <-
+  merge(
+    dc_adult.sc,
+    dc_snag.sc,
+    by = c("Treatment", "Unit", "timestep", "Species", "SizeClass"),
+    
+    all = TRUE
+  )
+
+dc_ad_sn_sp.sc <-
+  merge(
+    dc_ad_sn_sp.sc,
+    dc_snagcreate.sc,
+    by = c("Treatment", "Unit", "timestep", "Species", "SizeClass"),
+    
+    all = TRUE
+  )
+
+dc_ad_sn_sp.sc <-
+  merge(
+    dc_ad_sn_sp.sc,
+    dc_snagfall.sc,
+    by = c("Treatment", "Unit", "timestep", "Species", "SizeClass"),
+    
+    all = TRUE
+  )
+
+dc_ad_sn_sp.sc <-
+  merge(
+    dc_ad_sn_sp.sc,
+    dc_treefall.sc,
+    by = c("Treatment", "Unit", "timestep", "Species", "SizeClass"),
+    
+    all = TRUE
+  )
+
+dc_ad_sn_sp.sc <-
+  dc_ad_sn_sp.sc[, lapply(.SD, function(x)
+    ifelse(is.na(x), 0, x))]
+
+dc_ad_sn_sp.sc
+
+
+
+dc_ad_sn_sp.sc_calcs <-
+  dc_ad_sn_sp.sc[, .(
+    NumAdult,
+    NumSnagCreate,
+    NumExistSnags,
+    NumSnagFall,
+    NumTreeFall,
+    
+    SnagRecrRate = ifelse(NumSnagCreate == 0, 0,
+                          
+                          (NumSnagCreate /
+                             (
+                               NumAdult + NumSnagCreate
+                             )) * 100),
+    
+    SnagFallRate = ifelse(NumSnagFall == 0, 0,
+                          
+                          (
+                            NumSnagFall / (NumExistSnags + NumSnagCreate + NumSnagFall)
+                          ) * 100),
+    
+    TreeFallRate = ifelse(NumTreeFall == 0, 0,
+                          
+                          (NumTreeFall /
+                             (
+                               NumAdult + NumSnagCreate
+                             )) * 100)
+  ),
+  
+  by = c("Treatment", "Unit", "timestep", "Species", "SizeClass")]
+
+
+
+###Looking into tree fall
+
+dc_treefall.sc #only aspen in year 8 and 10 in clear-cuts are codes as SnagCreate&Fall... these must be brushed
+
+treefall_all <- dc_out_as[state_type == "SnagCreate&Fall"]
+
+unique(treefall_all$Dead.Code)
+
+unique(treefall_all$Treatment)
+
+unique(treefall_all$Species)
+
+unique(treefall_all$timestep)
+
+range(treefall_all$DBH)
+
+
+
+
+
+# Figures by species and size class--------------------------------------------------
+
+
+
+#DATE CREEK SNAG RECRUITMENT
+
+
+
+#changing scales between 3 groups - both size class
+
+p1 <-
+  ggplot(dc_ad_sn_sp.sc_calcs[Species %in% c("Western_Hemlock", "Western_redcedar", "Hybrid_spruce")]) +
+  
+  coord_cartesian(ylim = c(0, 1.5)) +
+  
+  geom_smooth(
+    aes(
+      x = timestep,
+      y = SnagRecrRate,
+      colour = Treatment,
+      lty = SizeClass,
+      
+      fill = Treatment
+    ),
+    size = 1.5,
+    alpha = 0.2
+  ) +
+  
+  theme_minimal() +
+  
+  scale_fill_manual(
+    values = c("#F0C808", "#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("NH", "LR", "HR", "CC"),
+    
+    labels = c(
+      "No harvest",
+      "High retention",
+      "Medium retention",
+      "No retention"
+    )
+  ) +
+  
+  scale_color_manual(
+    values = c("#F0C808", "#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("NH", "LR", "HR", "CC"),
+    
+    labels = c(
+      "No harvest",
+      "High retention",
+      "Medium retention",
+      "No retention"
+    )
+  ) +
+  
+  labs(
+    y = "Mortality (%)",
+    
+    x = "time since harvest",
+    
+    col = "Treatment",
+    
+    fill = "Treatment",
+    
+    shape = "Treatment"
+  ) +
+  
+  facet_wrap(c("Species"), labeller = as_labeller(
+    c(
+      "Western_redcedar" = "Western cedar",
+      
+      "Hybrid_spruce" = "Hybrid spruce",
+      
+      "Western_Hemlock" = "Western hemlock"
+    )
+  )) +
+  
+  theme(
+    legend.position = "none",
+    
+    text = element_text(family = "Arial"),
+    # Change "Arial" to your desired font
+    
+    plot.title = element_text(size = 14, face = "bold"),
+    
+    axis.title.x = element_blank(),
+    
+    axis.text.x = element_blank(),
+    
+    axis.title.y = element_text(size = 14, face = "bold"),
+    
+    axis.text.y = element_text(size = 14, face = "bold"),
+    
+    legend.text = element_text(size = 14, face = "bold"),
+    
+    strip.text = element_text(size = 14, face = "bold"),
+    
+    legend.title = element_text(size = 14, face = "bold")
+  )
+
+p1
+
+
+
+p2 <-
+  ggplot(dc_ad_sn_sp.sc_calcs[Species %in% c("Amabalis_Fir", "Subalpine_Fir", "Lodgepole_Pine")]) +
+  
+  coord_cartesian(ylim = c(0, 7)) +
+  
+  geom_smooth(
+    aes(
+      x = timestep,
+      y = SnagRecrRate,
+      colour = Treatment,
+      lty = SizeClass,
+      
+      fill = Treatment
+    ),
+    size = 1.5,
+    alpha = 0.2
+  ) +
+  
+  theme_minimal() +
+  
+  scale_fill_manual(
+    values = c("#F0C808", "#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("NH", "LR", "HR", "CC"),
+    
+    labels = c(
+      "No harvest",
+      "High retention",
+      "Medium retention",
+      "No retention"
+    )
+  ) +
+  
+  scale_color_manual(
+    values = c("#F0C808", "#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("NH", "LR", "HR", "CC"),
+    
+    labels = c(
+      "No harvest",
+      "High retention",
+      "Medium retention",
+      "No retention"
+    )
+  ) +
+  
+  labs(
+    y = "Mortality (%)",
+    
+    x = "Time since harvest (years)",
+    
+    col = "Treatment",
+    
+    fill = "Treatment",
+    
+    shape = "Treatment"
+  ) +
+  
+  facet_wrap(c("Species"), labeller = as_labeller(
+    c(
+      "Amabalis_Fir" = "Amabilis fir",
+      
+      "Lodgepole_Pine" = "Lodgepole pine",
+      
+      "Subalpine_Fir" = "Subalpine fir"
+    )
+  )) +
+  
+  theme(
+    legend.position = "none",
+    
+    text = element_text(family = "Arial"),
+    # Change "Arial" to your desired font
+    
+    plot.title = element_text(size = 14, face = "bold"),
+    
+    axis.title.x = element_blank(),
+    
+    axis.text.x = element_blank(),
+    
+    axis.title.y = element_text(size = 14, face = "bold"),
+    
+    axis.text.y = element_text(size = 14, face = "bold"),
+    
+    legend.text = element_text(size = 14, face = "bold"),
+    
+    strip.text = element_text(size = 14, face = "bold"),
+    
+    legend.title = element_text(size = 14, face = "bold")
+  )
+
+p2
+
+
+
+#deciduous species don't have enough trees to separate by size class so going back to no size class dataset
+
+p3 <-
+  ggplot(dc_ad_sn_sp[Species %in% c("Black_Cottonwood", "Paper_Birch", "Trembling_Aspen")]) +
+  
+  coord_cartesian(ylim = c(0, 13)) +
+  
+  guides (lty = "none") +
+  
+  geom_smooth(
+    aes(
+      x = timestep,
+      y = SnagRecrRate,
+      colour = Treatment,
+      
+      fill = Treatment
+    ),
+    size = 1.5,
+    alpha = 0.2
+  ) +
+  
+  theme_minimal() +
+  
+  scale_fill_manual(
+    values = c("#F0C808", "#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("NH", "LR", "HR", "CC"),
+    
+    labels = c(
+      "No harvest",
+      "High retention",
+      "Medium retention",
+      "No retention"
+    )
+  ) +
+  
+  scale_color_manual(
+    values = c("#F0C808", "#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("NH", "LR", "HR", "CC"),
+    
+    labels = c(
+      "No harvest",
+      "High retention",
+      "Medium retention",
+      "No retention"
+    )
+  ) +
+  
+  labs(
+    y = "Mortality (%)",
+    
+    x = "Time since harvest (years)",
+    
+    col = "Treatment",
+    
+    fill = "Treatment",
+    
+    shape = "Treatment"
+  ) +
+  
+  facet_wrap(c("Species"), labeller = as_labeller(
+    c(
+      "Black_Cottonwood" = "Black cottonwood",
+      
+      "Paper_Birch" = "Paper birch",
+      
+      "Trembling_Aspen" = "Trembling aspen"
+    )
+  )) +
+  
+  theme(
+    legend.position = "bottom",
+    
+    text = element_text(family = "Arial"),
+    # Change "Arial" to your desired font
+    
+    plot.title = element_text(size = 14, face = "bold"),
+    
+    axis.title = element_text(size = 14, face = "bold"),
+    
+    axis.text = element_text(size = 14, face = "bold"),
+    
+    legend.text = element_text(size = 12, face = "bold"),
+    
+    strip.text = element_text(size = 14, face = "bold"),
+    
+    legend.title = element_text(size = 12, face = "bold")
+  )
+
+p3
+
+
+
+p1 / p2 / p3
+
+
+
+ggsave(
+  filename = "ICH_snag_recruit_sp_sc.png",
+  width = 7.91,
+  height = 7,
+  
+  path = file.path(out_path),
+  device = 'png',
+  dpi = 1200
+)
+
+
+
+
+
+#SBS Snag creation and snag fall rate - by Species and size class
+
+sl_out_as$SizeClass <- ifelse(sl_out_as$DBH < 25, "Small", "Large")
+
+sl_adult.sc <-
+  sl_out_as[state_type == "Adult", .N, by = .(Treatment, Unit, timestep, Species, SizeClass)]
+
+setnames(sl_adult.sc, "N", "NumAdult")
+
+sl_snag.sc <-
+  sl_out_as[state_type == "Snag", .N, by = .(Treatment, Unit, timestep, Species, SizeClass)]
+
+setnames(sl_snag.sc, "N", "NumExistSnags")
+
+sl_snagcreate.sc <-
+  sl_out_as[state_type == "SnagCreate" | state_type == "SnagCreate&Fall",
+            
+            .N, by = .(Treatment, Unit, timestep, Species, SizeClass)]
+
+setnames(sl_snagcreate.sc, "N", "NumSnagCreate")
+
+sl_snagfall.sc <-
+  sl_out_as[state_type == "SnFallNext" | state_type == "SnagCreate&Fall",
+            
+            .N, by = .(Treatment, Unit, timestep, Species, SizeClass)]
+
+setnames(sl_snagfall.sc, "N", "NumSnagFall")
+
+sl_treefall.sc <- sl_out_as[state_type == "SnagCreate&Fall",
+                            
+                            .N, by = .(Treatment, Unit, timestep, Species, SizeClass)]
+
+setnames(sl_treefall.sc, "N", "NumTreeFall")
+
+
+
+sl_ad_sn_sp.sc <-
+  merge(
+    sl_adult.sc,
+    sl_snag.sc,
+    by = c("Treatment", "Unit", "timestep", "Species", "SizeClass"),
+    
+    all = TRUE
+  )
+
+sl_ad_sn_sp.sc <-
+  merge(
+    sl_ad_sn_sp.sc,
+    sl_snagcreate.sc,
+    by = c("Treatment", "Unit", "timestep", "Species", "SizeClass"),
+    
+    all = TRUE
+  )
+
+sl_ad_sn_sp.sc <-
+  merge(
+    sl_ad_sn_sp.sc,
+    sl_snagfall.sc,
+    by = c("Treatment", "Unit", "timestep", "Species", "SizeClass"),
+    
+    all = TRUE
+  )
+
+sl_ad_sn_sp.sc <-
+  merge(
+    sl_ad_sn_sp.sc,
+    sl_treefall.sc,
+    by = c("Treatment", "Unit", "timestep", "Species", "SizeClass"),
+    
+    all = TRUE
+  )
+
+sl_ad_sn_sp.sc <-
+  sl_ad_sn_sp.sc[, lapply(.SD, function(x)
+    ifelse(is.na(x), 0, x))]
+
+sl_ad_sn_sp.sc
+
+
+
+sl_ad_sn_sp.sc_calcs <-
+  sl_ad_sn_sp.sc[, .(
+    NumAdult,
+    NumSnagCreate,
+    NumExistSnags,
+    NumSnagFall,
+    NumTreeFall,
+    
+    SnagRecrRate = ifelse(NumSnagCreate == 0, 0,
+                          
+                          (NumSnagCreate /
+                             (
+                               NumAdult + NumSnagCreate
+                             )) * 100),
+    
+    SnagFallRate = ifelse(NumSnagFall == 0, 0,
+                          
+                          (
+                            NumSnagFall / (NumExistSnags + NumSnagCreate + NumSnagFall)
+                          ) * 100),
+    
+    TreeFallRate = ifelse(NumTreeFall == 0, 0,
+                          
+                          (NumTreeFall /
+                             (
+                               NumAdult + NumSnagCreate
+                             )) * 100)
+  ),
+  
+  by = c("Treatment", "Unit", "timestep", "Species", "SizeClass")]
+
+
+
+###Looking into tree fall
+
+sl_treefall.sc #none for Summit Lake
+
+
+
+
+
+# Figures by species and size class--------------------------------------------------
+
+
+
+#SUMMIT LAKE SNAG RECRUITMENT
+
+
+
+#changing scales between 3 groups - both size class
+
+p1 <-
+  ggplot(sl_ad_sn_sp.sc_calcs[Species %in% c("Subalpine_Fir", "Interior_Spruce")]) +
+  
+  coord_cartesian(ylim = c(0, 0.8)) +
+  
+  guides (lty = "none") +
+  
+  geom_smooth(
+    aes(
+      x = timestep,
+      y = SnagRecrRate,
+      colour = Treatment,
+      lty = SizeClass,
+      
+      fill = Treatment
+    ),
+    size = 1.5,
+    alpha = 0.2
+  ) +
+  
+  theme_minimal() +
+  
+  scale_color_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("light/no", "med", "heavy"),
+    
+    labels = c("High retention", "Medium retention", "Low retention")
+    
+  ) +
+  
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("light/no", "med", "heavy"),
+    
+    labels = c("High retention", "Medium retention", "Low retention")
+    
+  ) +
+  
+  labs(
+    y = "Mortality (%)",
+    
+    x = "Time since harvest (years)",
+    
+    col = "Treatment",
+    
+    fill = "Treatment",
+    
+    shape = "Treatment"
+  ) +
+  
+  facet_wrap(c("Species"), labeller = as_labeller(
+    c("Subalpine_Fir" = "Subalpine fir",
+      
+      "Interior_Spruce" = "Interior spruce")
+  )) +
+  
+  theme(
+    legend.position = "bottom",
+    
+    text = element_text(family = "Arial"),
+    # Change "Arial" to your desired font
+    
+    plot.title = element_text(size = 14, face = "bold"),
+    
+    axis.title = element_text(size = 14, face = "bold"),
+    
+    axis.text = element_text(size = 14, face = "bold"),
+    
+    legend.text = element_text(size = 14, face = "bold"),
+    
+    strip.text = element_text(size = 14, face = "bold"),
+    
+    legend.title = element_text(size = 14, face = "bold")
+  )
+
+p1
+
+
+
+ggsave(
+  filename = "SBS_snag_recruit_sp_sc.png",
+  width = 7.91,
+  height = 3,
+  
+  path = file.path(out_path),
+  device = 'png',
+  dpi = 1200
+)
+
+#SBS means and sd
+
+mortality_summary <- sl_ad_sn_sp.sc_calcs %>%
+  
+  group_by(Species, Treatment, SizeClass) %>%
+  
+  summarise(
+    SnagRecrRate_mean = mean(SnagRecrRate, na.rm = TRUE),
+    
+    SnagRecrRate_sd = sd(SnagRecrRate, na.rm = TRUE),
+    
+    SnagRecrRate_min = min(SnagRecrRate, na.rm = TRUE),
+    
+    SnagRecrRate_max = max(SnagRecrRate, na.rm = TRUE)
+  )
+
+mortality_summary
+
+
+
+sl_ad_sn_sp.sc_calcs[timestep == 100] %>%
+  
+  group_by(Species, Treatment, SizeClass) %>%
+  
+  summarise(
+    SnagRecrRate_mean = mean(SnagRecrRate, na.rm = TRUE),
+    
+    SnagRecrRate_sd = sd(SnagRecrRate, na.rm = TRUE),
+    
+    SnagRecrRate_min = min(SnagRecrRate, na.rm = TRUE),
+    
+    SnagRecrRate_max = max(SnagRecrRate, na.rm = TRUE)
+  )
+
+
+
+#ICH means and sd
+
+mortality_summary <-
+  dc_ad_sn_sp.sc_calcs[Species %in% sp_incl |
+                         Species == "Subalpine_Fir"] %>%
+  
+  group_by(Species, Treatment, SizeClass) %>%
+  
+  summarise(
+    SnagRecrRate_mean = mean(SnagRecrRate, na.rm = TRUE),
+    
+    SnagRecrRate_sd = sd(SnagRecrRate, na.rm = TRUE),
+    
+    SnagRecrRate_min = min(SnagRecrRate, na.rm = TRUE),
+    
+    SnagRecrRate_max = max(SnagRecrRate, na.rm = TRUE)
+  )
+
+mortality_summary
+
+
+
+dc_ad_sn_sp.sc_calcs[timestep == 100] %>%
+  
+  group_by(Species, Treatment, SizeClass) %>%
+  
+  summarise(
+    SnagRecrRate_mean = mean(SnagRecrRate, na.rm = TRUE),
+    
+    SnagRecrRate_sd = sd(SnagRecrRate, na.rm = TRUE),
+    
+    SnagRecrRate_min = min(SnagRecrRate, na.rm = TRUE),
+    
+    SnagRecrRate_max = max(SnagRecrRate, na.rm = TRUE)
+  )
+
+
+
+#Snag longevity stats for text
+
+sl_snagTime_sp_decay[Species %in% c("Subalpine_Fir", "Interior_Spruce")] %>%
+  
+  group_by(Species, DecayClass_max) %>%
+  
+  summarise(
+    SnagLongevity_mean = mean(TimeAsSnag, na.rm = TRUE),
+    
+    SnagLongevity_sd = sd(TimeAsSnag, na.rm = TRUE),
+    
+    SnagLongevity_max = max(TimeAsSnag, na.rm = TRUE)
+  )
+
+
+
+sl_snagTime_sp_decay$SizeClass <-
+  ifelse(sl_snagTime_sp_decay$DBH < 25, "Small", "Large")
+
+sl_snagTime_sp_decay[Species %in% c("Subalpine_Fir", "Interior_Spruce")] %>%
+  
+  group_by(Species, SizeClass) %>%
+  
+  summarise(
+    SnagLongevity_mean = mean(TimeAsSnag, na.rm = TRUE),
+    
+    SnagLongevity_sd = sd(TimeAsSnag, na.rm = TRUE),
+    
+    SnagLongevity_max = max(TimeAsSnag, na.rm = TRUE)
+  )
+
+
+
+sl_snagTime_sp_decay[Species %in% c("Subalpine_Fir", "Interior_Spruce")] %>%
+  
+  group_by(SizeClass) %>%
+  
+  summarise(
+    SnagLongevity_mean = mean(TimeAsSnag, na.rm = TRUE),
+    
+    SnagLongevity_sd = sd(TimeAsSnag, na.rm = TRUE),
+    
+    SnagLongevity_max = max(TimeAsSnag, na.rm = TRUE)
+  )
+
+
+
+
+
+dc_snagTime_sp_decay[Species %in% c("Western_Hemlock", "Western_redcedar")] %>%
+  
+  group_by(Species, DecayClass_max) %>%
+  
+  summarise(
+    SnagLongevity_mean = mean(TimeAsSnag, na.rm = TRUE),
+    
+    SnagLongevity_sd = sd(TimeAsSnag, na.rm = TRUE),
+    
+    SnagLongevity_max = max(TimeAsSnag, na.rm = TRUE)
+  )
+
+
+
+dc_snagTime_sp_decay[Species %in% c("Western_Hemlock", "Western_redcedar")] %>%
+  
+  group_by(Species, SizeClass) %>%
+  
+  summarise(
+    SnagLongevity_mean = mean(TimeAsSnag, na.rm = TRUE),
+    
+    SnagLongevity_sd = sd(TimeAsSnag, na.rm = TRUE),
+    
+    SnagLongevity_max = max(TimeAsSnag, na.rm = TRUE)
+  )
+
+
+
+dc_snagTime_sp_decay[Species %in% c("Western_Hemlock", "Western_redcedar")] %>%
+  
+  group_by(SizeClass) %>%
+  
+  summarise(
+    SnagLongevity_mean = mean(TimeAsSnag, na.rm = TRUE),
+    
+    SnagLongevity_sd = sd(TimeAsSnag, na.rm = TRUE),
+    
+    SnagLongevity_max = max(TimeAsSnag, na.rm = TRUE)
+  )
+
+
+
+
+
+#Snag fall
+
+# Snag fall rate -------------------------
+
+#SBS
+
+#rows with no snags have zero for snag fall but shouldn't be included in figures because
+
+#there were no snags to fall
+
+sl_snagfall_only <-
+  sl_ad_sn_sp.sc_calcs[NumSnagCreate + NumExistSnags > 0]
+
+
+
+ggplot(sl_snagfall_only[Species %in% c("Subalpine_Fir", "Interior_Spruce")]) +
+  
+  geom_smooth(
+    aes(
+      x = timestep,
+      y = SnagFallRate,
+      colour = Treatment,
+      
+      fill = Treatment,
+      lty = SizeClass
+    ),
+    size = 1.5,
+    alpha = 0.2
+  ) +
+  
+  theme_minimal() +
+  
+  coord_cartesian(ylim = c(0, 15)) +
+  
+  facet_wrap(c("Species"), labeller = as_labeller(
+    c("Subalpine_Fir" = "Subalpine fir",
+      
+      "Interior_Spruce" = "Interior spruce")
+  )) +
+  
+  scale_color_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("light/no", "med", "heavy"),
+    
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("light/no", "med", "heavy"),
+    
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  
+  labs(
+    y = "Snag Fall Rate (%)",
+    
+    x = "Time since harvest (years)",
+    
+    col = "Treatment",
+    
+    fill = "Treatment",
+    
+    shape = "Treatment"
+  ) +
+  
+  theme(
+    legend.position = "bottom",
+    
+    text = element_text(family = "Arial"),
+    # Change "Arial" to your desired font
+    
+    plot.title = element_text(size = 14, face = "bold"),
+    
+    axis.title = element_text(size = 14, face = "bold"),
+    
+    axis.text = element_text(size = 14, face = "bold"),
+    
+    legend.text = element_text(size = 12, face = "bold"),
+    
+    strip.text = element_text(size = 14, face = "bold"),
+    
+    legend.title = element_text(size = 12, face = "bold")
+  ) +
+  
+  guides (lty = "none")
+
+ggsave(
+  filename = "SBS_snag_fall rate by species and size class.png",
+  width = 7.91,
+  height = 4,
+  
+  path = file.path(out_path),
+  device = 'png',
+  dpi = 1200
+)
+
+
+
+#ICH
+
+#rows with no snags have zero for snag fall but shouldn't be included in figures because
+
+#there were no snags to fall
+
+dc_snagfall_only <-
+  dc_ad_sn_sp.sc_calcs[NumSnagCreate + NumExistSnags > 0]
+
+
+
+ggplot(dc_snagfall_only[Species %in% c("Western_Hemlock", "Western_redcedar")]) +
+  
+  geom_smooth(
+    aes(
+      x = timestep,
+      y = SnagFallRate,
+      colour = Treatment,
+      
+      fill = Treatment,
+      lty = SizeClass
+    ),
+    size = 1.5,
+    alpha = 0.2
+  ) +
+  
+  theme_minimal() +
+  
+  coord_cartesian(ylim = c(0, 15)) +
+  
+  facet_wrap(c("Species"), labeller = as_labeller(
+    c("Western_Hemlock" = "Western hemlock",
+      
+      "Western_redcedar" = "Western redcedar")
+  )) +
+  
+  scale_fill_manual(
+    values = c("#F0C808", "#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("NH", "LR", "HR", "CC"),
+    
+    labels = c(
+      "No harvest",
+      "High retention",
+      "Medium retention",
+      "No retention"
+    )
+  ) +
+  
+  scale_color_manual(
+    values = c("#F0C808", "#6C4191", "#66BBBB", "#DD4444"),
+    
+    breaks = c("NH", "LR", "HR", "CC"),
+    
+    labels = c(
+      "No harvest",
+      "High retention",
+      "Medium retention",
+      "No retention"
+    )
+  ) +
+  
+  labs(
+    y = "Snag Fall Rate (%)",
+    
+    x = "Time since harvest (years)",
+    
+    col = "Treatment",
+    
+    fill = "Treatment",
+    
+    shape = "Treatment"
+  ) +
+  
+  theme(
+    legend.position = "bottom",
+    
+    text = element_text(family = "Arial"),
+    # Change "Arial" to your desired font
+    
+    plot.title = element_text(size = 14, face = "bold"),
+    
+    axis.title = element_text(size = 14, face = "bold"),
+    
+    axis.text = element_text(size = 14, face = "bold"),
+    
+    legend.text = element_text(size = 12, face = "bold"),
+    
+    strip.text = element_text(size = 14, face = "bold"),
+    
+    legend.title = element_text(size = 12, face = "bold")
+  ) +
+  
+  guides (lty = "none")
+
+ggsave(
+  filename = "ICH_snag_fall rate by species and size class.png",
+  width = 7.91,
+  height = 4,
+  
+  path = file.path(out_path),
+  device = 'png',
+  dpi = 1200
+)
+
+
+
+#Snag fall rate stats for text
+
+sl_snagfall_only[Species %in% c("Subalpine_Fir", "Interior_Spruce")] %>%
+  
+  group_by(Species, SizeClass) %>%
+  
+  summarise(
+    SnagFall_mean = mean(SnagFallRate, na.rm = TRUE),
+    
+    SnagFall_sd = sd(SnagFallRate, na.rm = TRUE)
+  )
+
+
+
+sl_snagfall_only[Species %in% c("Subalpine_Fir", "Interior_Spruce")] %>%
+  
+  group_by(SizeClass) %>%
+  
+  summarise(
+    SnagFall_mean = mean(SnagFallRate, na.rm = TRUE),
+    
+    SnagFall_sd = sd(SnagFallRate, na.rm = TRUE)
+  )
+
+
+
+dc_snagfall_only[Species %in% c("Western_Hemlock", "Western_redcedar")] %>%
+  
+  group_by(Species, SizeClass) %>%
+  
+  summarise(
+    SnagFall_mean = mean(SnagFallRate, na.rm = TRUE),
+    
+    SnagFall_sd = sd(SnagFallRate, na.rm = TRUE)
+  )
+
+
+
+dc_snagfall_only[Species %in% c("Trembling_Aspen", "Black_Cottonwood", "Paper_Birch")] %>%
+  
+  group_by(Species, SizeClass) %>%
+  
+  summarise(
+    SnagFall_mean = mean(SnagFallRate, na.rm = TRUE),
+    
+    SnagFall_sd = sd(SnagFallRate, na.rm = TRUE)
+  )
+
+
+
+dc_snagfall_only %>%
+  
+  group_by(SizeClass) %>%
+  
+  summarise(
+    SnagFall_mean = mean(SnagFallRate, na.rm = TRUE),
+    
+    SnagFall_sd = sd(SnagFallRate, na.rm = TRUE)
+  )
+
+
+
+
+
+
+
+
+
+####################################
+
+######  End erica section of code ##
+
+####################################
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

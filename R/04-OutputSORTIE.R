@@ -2,7 +2,12 @@ library(rsortie)
 library(doParallel)
 library(DateCreekData)
 
-######################### PROCESS SORTIE OUTPUTS ################################
+#there are 2 different approaches to extracting Sortie outputs here - the SBS uses small
+# stands, so we are able to extract and parse directly here. The ICH study uses large stands, so
+#  using the GUI to batch extract the detailed output files (trees) is faster, and then loading 
+# those in here to sub-sample them further for analysis. The grids for the ICH are
+# extracted and parsed directly here
+
 #SBS---------------------------------------------------------------------------
 in_dir <- file.path("03_out_sortie", "02_summit_lake")
 plots_path <- file.path("02_init_sortie", "02_summit_lake","ParameterValues") 
@@ -10,12 +15,8 @@ plots_path <- file.path("02_init_sortie", "02_summit_lake","ParameterValues")
 #plots
 plots <- list.files(plots_path, pattern = "summit")
 
-#out_path <- file.path(base_dir, "./Inputs/SORTIEruns/SummitLake/Outputs/")
-#paramFiles_run <- file.path(base_dir, "./Inputs/SORTIEruns/SummitLake/ParameterValues/")
-
 plot_root <- stringr::str_split(plots,".csv",
                             simplify = TRUE)[,1]
-
 
 files_2_ext <- list.files(in_dir, pattern = "ds-nci_si_6_det", full.names = FALSE)
 
@@ -38,10 +39,6 @@ parse_trees <- 1
 yrs <- seq(0,100) #years vary by plot
 
 t_p <- grep(paste(paste0("_",yrs,".xml"),collapse = "|"),treat_parse, value = TRUE)
-
-#in parallel:--------------
-
-################## make this into a function!!!!!!!!!!!!!!!! ########################
 
 #split treat_parse into treatments for parallel processing
 t_p_l <- list()
@@ -119,7 +116,7 @@ detailed_path <- "./03_out_sortie/01_date_creek/extracted/"
 Outputs_path <- "./03_out_sortie/01_date_creek/extracted/"
 
 Outputs_ending <- "_-"
-years_to_extract <- seq(0,30)
+years_to_extract <- seq(0,100)
 Units_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/UnitBoundaries/"
 Gaps_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/GapCutsDateCreek/"
 
@@ -133,12 +130,9 @@ DateCreekData::subplot_outputs(out_path = Outputs_path,
                                plotting = FALSE)
 
 #--------------------------------------------------------------------------------------
-#get the grids:
-#out_path <- "../SORTIEparams/Outputs/ICH/CompMort/" 
-##paramFiles_run <- "../SORTIEparams/Inputs/ICH/CompMort/ParameterValues/"
+#get the grids (parses directly from Sortie outputs)
 out_path <- "./03_out_sortie/01_date_creek/"
 run_name <- ""
-#paramFiles_run <- "../SORTIEparams/Inputs/ICH/CompMort/ParameterValues/"
 plots <- DateCreekData::Treatments$Unit
 
 files_2_ext <- grep(run_name,list.files(out_path, pattern = "det.gz.tar", 
@@ -209,7 +203,8 @@ g_dt_all <- foreach::foreach(i=1:length(t_p_l))%dopar%{
     
   }
   if(parse_grids == 1){
-    fwrite(g_dt, paste0(extFileDir,treat_acronym,"-",unn,"-grids.csv"), append=FALSE)  
+    #fwrite(g_dt, paste0(extFileDir,treat_acronym,"-",unn,"-grids.csv"), append=FALSE)  
+    fwrite(g_dt, paste0(extFileDir,"-",unn,"-grids.csv"), append=FALSE)  
   }
   if(parse_trees == 1){
     fwrite(t_dt, paste0(extFileDir,treat_acronym,"-",unn,"-trees.csv"), append=FALSE)  
@@ -227,6 +222,6 @@ glis <- grid_dt[mapnm %in% grid_to_output]
 
 #just output first 30 years
 
-fwrite(glis[timestep <31], paste0(out_path,"glis.csv"))
+fwrite(glis, paste0(out_path,"glis_100.csv"))
 
 

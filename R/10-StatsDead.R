@@ -11,9 +11,17 @@ source(file.path("R","00-utils","utils.R"))
 in_path <- "04_out_carbon"
 out_path <- "05_out_analysis"
 
-# SBS -------------------------------------------------------------------------------------------
+
 MSD_trees_sl <- readRDS(file.path(in_path,"MSD_trees_sl.RDS"))
 FSD_trees_sl <- readRDS(file.path(in_path,"FSD_trees_sl.RDS"))
+
+
+# SBS -------------------------------------------------------------------------------------------
+MFD_trees_sl <- merge(FSD_trees_sl, MSD_trees_sl, by = c("Unit","Treatment","Year","State"),
+                      all.x = TRUE)
+setnames(MFD_trees_sl, c("MgHa.x","MgHa.y","BaHa.x","BaHa.y"), 
+         c("MgHa_obs","MgHa_pred","BaHa_obs","BaHa_pred"))
+MFD_trees_sl[is.na(MgHa_pred), `:=`(MgHa_pred = 0, BaHa_pred = 0)]#in 1992 - no dead in model
 
 MFD_trees_sl <- merge(FSD_trees_sl, MSD_trees_sl, by = c("Unit","Treatment","Year","State"),
                      all.x = TRUE)
@@ -31,7 +39,7 @@ ggplot()+
   geom_point(aes(x = MgHa_pred, y = MgHa_obs, group = as.factor(Unit), 
                  color = Treatment), 
              alpha = 0.9,
-             size = 2,
+             size = 4,
              data = MFD_trees_sl)+
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey")+
   scale_color_manual(
@@ -41,8 +49,8 @@ ggplot()+
   ) +
   coord_cartesian() +
   labs(
-    x = "Carbon (Mg/ha) predicted",
-    y = "Carbon (Mg/ha) observed",
+    x = "Dead carbon (Mg·ha⁻¹) predicted",
+    y = "Dead carbon (Mg·ha⁻¹) observed",
     col = "Treatment",
     fill = "Treatment",
     shape = "Treatment"
@@ -70,8 +78,8 @@ ggplot()+
   ) +
   coord_cartesian() +
   labs(
-    x = "Carbon (Mg/ha) predicted",
-    y = "Carbon (Mg/ha) observed",
+    x = "Carbon (Mg·ha⁻¹) predicted",
+    y = "Carbon (Mg·ha⁻¹) observed",
     col = "Treatment",
     fill = "Treatment",
     shape = "Treatment"
@@ -112,7 +120,7 @@ ggplot(NULL,
   coord_cartesian(ylim = c(0, 35)) +
   labs(
     x = "Year",
-    y = "Carbon (Mg/ha)",
+    y = "Carbon (Mg·ha⁻¹)",
     col = "Treatment",
     fill = "Treatment",
     shape = "Treatment"
@@ -158,7 +166,7 @@ ggplot(NULL,
   coord_cartesian(ylim = c(0, 35)) +
   labs(
     x = "Year",
-    y = "Dead standing carbon (Mg/ha)",
+    y = "Dead standing carbon (Mg·ha⁻¹)",
     col = "Treatment",
     fill = "Treatment",
     shape = "Treatment"
@@ -256,9 +264,6 @@ MFD_trees_summary <- MFD_trees_sl %>%
 MSD_trees_sl[, TSH := ifelse(Unit == 4, Year - 1994,
                             ifelse(Unit == 15, Year - 1994,
                                    Year - 1992))]
-model1 <- lmer(MgHa ~ Treatment * TSH + (1 | Unit), 
-               data = MSD_trees_sl)
-anova(model1)
 
 # Define the equivalence bounds as percentages of the mean observed value
 equivalence_bounds <- c(0.05, 0.10, 0.15, 0.17, 0.2, 0.25, 0.3,
@@ -304,7 +309,7 @@ final_table <- MFD_trees_summary[, .(
 )]
 
 # ---------------
-fwrite(final_table, "Table 3_SBS_dead.csv", encoding = "UTF-8")  
+final_table  
 # ---------------
 
 
@@ -345,7 +350,7 @@ ggplot()+
   geom_point(aes(x = MgHa_pred, y = MgHa_obs, 
                  color = Treatment), 
              alpha = 0.9,
-             size = 2,
+             size = 4,
              data = MFD_trees_dc)+
   geom_abline(slope = 1, intercept = 0, linetype = "dashed", color = "grey")+
   scale_color_manual(
@@ -355,8 +360,8 @@ ggplot()+
   ) +
   coord_cartesian() +
   labs(
-    x = "Carbon (Mg/ha) predicted",
-    y = "Carbon (Mg/ha) observed",
+    x = "Dead carbon (Mg·ha⁻¹) predicted",
+    y = "Dead carbon (Mg·ha⁻¹) observed",
     col = NULL,
     fill = "Treatment",
     shape = "Treatment"
@@ -386,7 +391,7 @@ ggplot(NULL,
   coord_cartesian(ylim = c(0, 70)) +
   labs(
     x = "Year",
-    y = "Dead standing carbon (Mg/ha)",
+    y = "Dead standing carbon (Mg·ha⁻¹)",
     col = "Treatment",
     fill = "Treatment",
     shape = "Treatment"
@@ -461,10 +466,6 @@ MFD_trees_summary <- MFD_trees_dc %>%
 MSD_trees_sl[, TSH := ifelse(Unit == 4, Year - 1994,
                              ifelse(Unit == 15, Year - 1994,
                                     Year - 1992))]
-model1 <- lmer(MgHa ~ Treatment * TSH + (1 | Unit), 
-               data = MSD_trees_sl)
-anova(model1)
-
 # Define the equivalence bounds as percentages of the mean observed value
 equivalence_bounds <- c(0.05, 0.10, 0.15, 0.17, 0.2, 0.25, 0.3,
                         0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
@@ -508,6 +509,6 @@ final_table <- MFD_trees_summary[, .(
 )]
 
 # ---------------
-fwrite(final_table, file.path(out_path, "Table 3_ICH_dead.csv"), encoding = "UTF-8")  
+final_table
 # ---------------
 

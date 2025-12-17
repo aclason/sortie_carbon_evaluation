@@ -8,55 +8,77 @@ source(file.path("R","00-utils","utils.R"))
 in_path <- "04_out_carbon"
 out_path <- "05_out_analysis"
 
-# SBS -------------------------------------------------------------------------------------------
+# Import data ----------------------------------------------------------------------
+# SBS ------
 MSL_trees_sl <- readRDS(file.path(in_path,"MSL_trees_sl.RDS"))
 FSL_trees_sl <- readRDS(file.path(in_path,"FSL_trees_sl.RDS"))
 
 MSL_trees_sl_sp <- readRDS(file.path(in_path,"MSL_trees_sl_sp.RDS"))
 FSL_trees_sl_sp <- readRDS(file.path(in_path,"FSL_trees_sl_sp.RDS"))
-
-#Basal area recovery time
-#there was no pre-harvest basal area data for Unit 15 so it is dropped from recovery analysis
+#pre-harvest Basal area for SBS
 SL_preharvest <- fread(file.path("01_data","SL_preHarvest_BA.csv"))
-setnames(SL_preharvest, "Plot","Unit")
-DC_preharvest <- fread(file.path("01_data","DC_preHarvest_BA.csv"))
 
 
-
-MFL_trees_sl <- merge(FSL_trees_sl, MSL_trees_sl, by = c("Unit","Treatment","Year","State"),
-                      all.x = TRUE)
-setnames(MFL_trees_sl, c("MgHa.x","MgHa.y","BaHa.x","BaHa.y"), 
-         c("MgHa_obs","MgHa_pred","BaHa_obs","BaHa_pred"))
-MF_trees_sl_sp <- merge(FSL_trees_sl_sp, MSL_trees_sl_sp, 
-                        by = c("Unit","Treatment","Year","State","Species"),
-                        all.x = TRUE)
-setnames(MF_trees_sl_sp, c("MgHa.x","MgHa.y","BaHa.x","BaHa.y"), 
-         c("MgHa_obs","MgHa_pred","BaHa_obs","BaHa_pred"))
-MF_trees_sl_sp[is.na(MgHa_pred), MgHa_pred := 0]
-
-
-# ICH ----------------------------------------------------------------------------------------
+# ICH -------
 MSL_trees_dc <- readRDS(file.path(in_path,"MSL_trees_dc.RDS"))
 FSL_trees_dc <- readRDS(file.path(in_path,"FSL_trees_dc.RDS"))
 
 MSL_trees_dc_sp <- readRDS(file.path(in_path,"MSL_trees_dc_sp.RDS"))
 FSL_trees_dc_sp <- readRDS(file.path(in_path,"FSL_trees_dc_sp.RDS"))
+#Tass runs for ICH
+TASS <- read.csv(file.path("01_data","TASS_carbon_projections_DateCreek.csv"))
 
+
+# Prep data -----------------------------------------------------------------------
+# SBS ------
+setnames(SL_preharvest, "Plot","Unit")
+DC_preharvest <- fread(file.path("01_data","DC_preHarvest_BA.csv"))
+
+MFL_trees_sl <- merge(FSL_trees_sl, MSL_trees_sl, by = c("Unit","Treatment","Year","State"),
+                      all.x = TRUE)
+setnames(MFL_trees_sl, c("MgHa.x","MgHa.y","BaHa.x","BaHa.y"), 
+         c("MgHa_obs","MgHa_pred","BaHa_obs","BaHa_pred"))
+
+# summary by treatment and year
+MSL_trees_sl_sum_ty <- Rmisc::summarySE(data = MSL_trees_sl, 
+                                        measurevar = "MgHa", 
+                                        groupvars = c("Treatment","Year"))
+MSL_trees_sl_sum_ty <- MSL_trees_sl_sum_ty[MSL_trees_sl_sum_ty$Year < 2093,]
+FSL_trees_sl_sum_ty <- Rmisc::summarySE(data = FSL_trees_sl, 
+                                        measurevar = "MgHa", 
+                                        groupvars = c("Treatment","Year"))
+
+#ICH --------
 MFL_trees_dc <- merge(FSL_trees_dc, MSL_trees_dc, by = c("Unit","Treatment","Year","State"),
                       all.x = TRUE)
 setnames(MFL_trees_dc, c("MgHa.x","MgHa.y", "BAHa.x", "BAHa.y"),
          c("MgHa_obs","MgHa_pred","BAHa_obs", "BAHa_pred"))
 
-MF_trees_dc_sp <- merge(FSL_trees_dc_sp, MSL_trees_dc_sp, 
-                        by = c("Unit","Treatment","Year","State","Species"),
-                        all.x = TRUE)
-setnames(MF_trees_dc_sp, c("MgHa.x","MgHa.y", "BAHa", "BaHa"),
-         c("MgHa_obs","MgHa_pred","BAHa_obs", "BAHa_pred"))
+
 MSL_trees_dc_sum <- Rmisc::summarySE(data = MSL_trees_dc, 
                                      measurevar = "MgHa", 
                                      groupvars = c("Year", "Treatment"))
 
-# SBS ----------------------------------------
+#TASS projections
+TASS$MgHa <- rowMeans(TASS[, 2:5])
+TASS$MgHa_OAFs <- rowMeans(TASS[, 6:9])
+TASS$Year <- TASS$Age + 1992
+TASS$Treatment <- rep("TASS", length(TASS$Age))
+TASS$N <- rep(4, length(TASS$Age))
+TASS$sd <- rep(NA, length(TASS$Age))
+TASS$se <- rep(NA, length(TASS$Age))
+TASS$ci <- rep(NA, length(TASS$Age))
+
+MSL_trees_dc_sum_TASS <- rbind(MSL_trees_dc_sum, 
+                               TASS[c("Year", "Treatment", "N", "MgHa",  "sd", "se", "ci")])
+TASS_OAFs <- TASS[c("Year", "Treatment", "N", "MgHa_OAFs",  "sd", "se", "ci")]
+TASS_OAFs$MgHa <- TASS_OAFs$MgHa_OAFs
+TASS_OAFs$Treatment <- rep("TASS_OAFs", length(TASS_OAFs$Year))
+MSL_trees_dc_sum_TASS <- rbind(MSL_trees_dc_sum_TASS, 
+                               TASS_OAFs[c("Year", "Treatment", "N", "MgHa",  "sd", "se", "ci")])
+
+# Pre-harvest baselines ----------------------------------------------------------------------------
+# SBS -----
 # estimate pre-harvest carbon form Carbon-BA relationship
 model_C_est <- lm(data = MFL_trees_sl, MgHa_obs ~ BaHa_obs)
 anova(model_C_est)
@@ -129,17 +151,11 @@ C_Rec_year_SL %>% #D5 never recovers its carbon in SORTIE
     NumYears2recovery = mean(NumYears2recovery, na.rm = TRUE)
   )
 
-#plot(SL_CrecoveryYear_wide$PercentLost_C,
-     #SL_CrecoveryYear_wide$NumYears2recovery)
 
 # ICH --------------------------------------------------------
-#using raw data
+#using raw data 
 Baseline_DC <- subset(MFL_trees_dc, MFL_trees_dc$Year == 1992)
 
-#OR using same equation approach as Summit Lake?
-#
-
-#
 BArecoveryYear <-
   merge(setorder(MSL_trees_dc[Year != 1992,], Unit, Year), 
         Baseline_DC[, .(Unit, BAHa_obs)], all.x = TRUE)
@@ -183,12 +199,10 @@ C_Rec_year_DC %>% #D5 never recovers its carbon in SORTIE
     NumYears2recovery = mean(NumYears2recovery, na.rm = TRUE)
   )
 
-# Together -----------------------------------------------------------------------------------------
-#Recovery time for carbon across treatment units and ecosystems figure
-# SBS
-#Recovery time for carbon across treatment units and ecosystems figure
-# data to be brought in on Date Creek section below
-SL_CrecoveryYear <- CrecoveryYear_SL[Year == 1992 | Year == 1994] #I'm assuming it's this object:CrecoveryYear_SL
+#Recovery time for carbon across treatment units and ecosystems ------------------------------------
+#SBS -------
+#I'm assuming it's this object:CrecoveryYear_SL
+SL_CrecoveryYear <- CrecoveryYear_SL[Year == 1992 | Year == 1994] 
 
 SL_CrecoveryYear_wide <-
   dcast(SL_CrecoveryYear, Unit + Treatment ~ Year, value.var = "MgHa")
@@ -214,7 +228,7 @@ setnames(SL_CrecoveryYear_wide, c("MgHa_pre","postMgHa"),
 SL_CrecoveryYear_wide[,PercentLost_C :=  100 - (MgHa_postHarv / MgHa_preHarv* 100) ]
 SL_CrecoveryYear_wide[,pre_harv_BA :=NULL]
 
-# ICH
+# ICH -------
 DC_C_yr1 <- CrecoveryYear_DC[Year == 1993]
 setnames(DC_C_yr1, "MgHa","MgHa_postHarv")
 DC_CrecoveryYear_wide <-
@@ -239,10 +253,10 @@ DC_CrecoveryYear_wide[,`:=`(MgHaLost_C =  ifelse(MgHa_preHarv - MgHa_postHarv < 
 SL_CrecoveryYear_wide[,`:=`(MgHaLost_C = ifelse(MgHa_preHarv - MgHa_postHarv < 0,0,
                                                 MgHa_preHarv - MgHa_postHarv), 
                             Ecosystem = "SBS")]
+
+# Put together ------------------------------
 CrecoveryAll <- rbind(DC_CrecoveryYear_wide, SL_CrecoveryYear_wide)
 CrecoveryAll[,PercentLost_C := ifelse(PercentLost_C < 0, 0, PercentLost_C)]
-
-
 
 Crecovery_noCC <- CrecoveryAll[Treatment != "CC"] #Dropping clear-cuts from figure
 harvest_intensity <- c("NH", "LR", "HR", "CC", "light/no", "med", "heavy")
@@ -258,10 +272,168 @@ harvest_intensity <- c("No harvest", "High retention", "Medium retention","Low r
 shapes <- c(22, 21) 
 ecosystem <- c("ICH", "SBS")
 ecosystem_labels <- c("ICH", "SBS")
+#just partial harvests
 Crecovery_PC <- Crecovery_noCC[retention != "No harvest"]
-# ---------------------------------------------------------------------------------
-# analysis and figures
+Crecovery_PC[,.(mn_yrs = mean(NumYears2recovery),
+                sd_yrs = sd(NumYears2recovery)), 
+             by = .(Ecosystem, retention)]
 
+# -------------------------------------------------------------------------------------------------
+#Figures -------------------
+
+#carbon recovery compared to baseline:
+#SBS: Figure 6A ----
+LineValue_SL <- mean(SL_preharvest$MgHa_pre) #mean of SBS pre-harvest MgHa
+
+ggplot(NULL,
+       aes(x = Year, y = MgHa, fill = Treatment, group = Treatment)) +
+  geom_line(data = MSL_trees_sl_sum_ty, aes(col = Treatment), size = 1.2) +
+  #scale_x_continuous(breaks = seq(0, 28, by = 2), expand = expansion(mult = c(0, 0.05))) +
+  scale_colour_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  coord_cartesian(ylim = c(0, 160), xlim = c(1990,2087)) +
+  labs(
+    x = "Year",
+    y = "Live carbon (Mg/ha)",
+    col = "Treatment",
+    fill = "Treatment",
+    shape = "Treatment"
+  ) +
+  geom_ribbon(
+    data = MSL_trees_sl_sum_ty,
+    aes(ymin = MgHa - ci, ymax = MgHa + ci),
+    alpha = 0.1,
+    linetype = "solid",
+    color = "grey"
+  ) +
+  geom_point(
+    data = FSL_trees_sl,
+    aes(shape = Treatment),
+    size = 1 ,
+    position = position_dodge(width = 3)
+  )+
+  scale_shape_manual(
+    values = c(24, 23, 21),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  )+
+  annotate("segment", x = 1985, xend = 2092, y = LineValue_SL, 
+           yend = LineValue_SL, color = "gray", lty = 2, size = 1.2)+
+  theme(legend.position = "bottom")
+
+ggsave(filename = "SBS_live_trees_carbonRecovery.jpg",
+       path = file.path(out_path), device='jpeg', dpi=1000)
+
+
+#ICH Figure 6B ----
+LineValue_DC <- mean(Baseline_DC$MgHa_obs)
+
+ggplot(NULL,
+       aes(x = Year, y = MgHa, fill = Treatment, group = Treatment)) +
+  geom_line(data = MSL_trees_dc_sum, aes(col = Treatment), size = 1.2) +
+  scale_color_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  ) +
+  scale_fill_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  ) +
+  coord_cartesian(ylim = c(0, 250)) +
+  labs(
+    x = "Year",
+    y = "Live carbon (Mg/ha)",
+    col = "Treatment",
+    fill = "Treatment",
+    shape = "Treatment"
+  ) +
+  geom_ribbon(
+    data = MSL_trees_dc_sum,
+    aes(ymin = MgHa - ci, ymax = MgHa + ci),
+    alpha = 0.1,
+    linetype = "solid",
+    color = "grey"
+  ) +
+  geom_point(
+    data = FSL_trees_dc,
+    aes(shape = Treatment),
+    size = 1 ,
+    position = position_dodge(width = 3)
+  )+
+  scale_shape_manual(
+    values = c(24, 23, 21, 25),
+    breaks = c("NH","LR", "HR", "CC"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention")
+  )+
+  annotate("segment", x = 1992, xend = 2092, y = LineValue_DC, 
+           yend = LineValue_DC, color = "gray", lty = 2, size = 1.2)+
+  theme(legend.position = "bottom")+
+  guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
+  guides(color = guide_legend(override.aes = list(size = 5)))
+
+ggsave(filename = "ICH_live_trees_carbonRecovery.jpg",
+       path = file.path(out_path), device='jpeg', dpi=1000)
+
+# Figure S2-1
+ggplot(NULL,
+       aes(x = Year, y = MgHa, fill = Treatment, group = Treatment)) +
+  geom_line(data = MSL_trees_dc_sum_TASS, aes(col = Treatment), size = 1.2) +
+  #geom_line(data = TASS,  aes(x = Year, y = MgHa, col = "gray"), lty = 2)+
+  scale_color_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444", "grey", "black"),
+    breaks = c("NH","LR", "HR", "CC", "TASS", "TASS_OAFs"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention", "TASS", "TASS_OAFs")
+  ) +
+  scale_fill_manual(
+    values = c("#F0C808","#6C4191", "#66BBBB", "#DD4444", "grey", "black"),
+    breaks = c("NH","LR", "HR", "CC", "TASS", "TASS_OAFs"),
+    labels = c("No harvest","High retention", "Medium retention", "No retention", "TASS", "TASS_OAFs")
+  ) +
+  coord_cartesian(ylim = c(0, 250), xlim = c(1999, 2092)) +
+  labs(
+    x = "Year",
+    y = "Live carbon (Mg/ha)",
+    col = "Treatment",
+    fill = "Treatment",
+    shape = "Treatment"
+  ) +
+  geom_ribbon(
+    data = MSL_trees_dc_sum,
+    aes(ymin = MgHa - ci, ymax = MgHa + ci),
+    alpha = 0.1,
+    linetype = "solid",
+    color = "grey"
+  ) +
+  geom_point(
+    data = FSL_trees_dc,
+    aes(shape = Treatment),
+    size = 1 ,
+    position = position_dodge(width = 3)
+  )+
+  scale_shape_manual(values = c(24, 23, 21, 25, 26),
+                     breaks = c("NH","LR", "HR", "CC", "TASS"), 
+                     labels = c("No harvest","High retention", "Medium retention", "No retention",
+                                "TASS"))+
+  annotate("segment", x = 1992, xend = 2092, y = LineValue_DC, 
+           yend = LineValue_DC, color = "gray", lty = 2, size = 1.2)+
+  guides(color = guide_legend(title.position = "top", title.hjust = 0.5))+
+  guides(color = guide_legend(override.aes = list(size = 5)))
+
+ggsave(filename = "ICH_live_trees_TASS.jpg",
+       path = file.path(out_path), device='jpeg', dpi=1000)
+
+
+# Figure 7 - Carbon recovery against harvest intensity (MgHa)
 fit_sep <- lm(NumYears2recovery ~ MgHaLost_C:Ecosystem - 1, data = Crecovery_PC)
 fit_common <- lm(NumYears2recovery ~ MgHaLost_C - 1, data = Crecovery_PC)
 anova(fit_common, fit_sep)

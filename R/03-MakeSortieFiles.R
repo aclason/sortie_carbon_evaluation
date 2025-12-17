@@ -1,33 +1,56 @@
 library(rsortie)
 library(data.table)
+library(DateCreekData)
+
+# harvest 
+Units_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/UnitBoundaries/"
+Gaps_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/GapCutsDateCreek/"
+
+#cwd
+cwd_init_dc <- "D:/Github/DateCreekData/data-raw/CWD/" #folder location
+cwd_92 <- file.path("D:/Github/DateCreekData/data-raw/CWD/","CWD_1992.csv") #file location
+cwd_post_dc <- "D:/Github/DateCreekData/data-raw/CWD/"
+cwd_93 <- file.path("D:/Github/DateCreekData/data-raw/CWD/","CWD_1993.csv") #file location
+
+
+
+
 
 #SBS---------------------------------------------------------------------------
+#file paths
 in_dir <- file.path("02_init_sortie", "02_summit_lake") 
+My_basePath <- file.path(in_dir,"ParameterFiles","BaseFiles") 
+My_newxmlPath <- file.path(in_dir,"ParameterFiles") 
+My_newvalsPath <- file.path(in_dir,"ParameterValues") 
 
-My_basePath <- paste0(in_dir,"/ParameterFiles/BaseFiles/") 
-My_newxmlPath <- paste0(in_dir,"/ParameterFiles/") 
-My_newvalsPath <- paste0(in_dir,"/ParameterValues/") 
-
+cwd_sl <- file.path("01_data","SBS_cwd_BRogers.csv")
+substrate_loc_sl <- "DetailedSubstrate14"
 #plots
 plots <- list.files(My_newvalsPath, pattern = "summit")
 
-#list files
+#1. create Sortie parameter files for each stand:
+base_sl <- "SBS.xml" #SBS basefile
+det_sub_sl <- "ds.csv" # the detailed substrate update
+nci_sl <- "nci_si_6.csv" # The competitive growth update for SBSmc2 06 sites (closer to SBSmk1)
+
 lstOfFiles <- data.frame("type"=c(0,rep(1,length(plots)),2,3),
-                         "name"=c("SBS.xml",
-                                  plots,"ds.csv","nci_si_6.csv"))
-#add the inits to VariableNames
+                         "name"=c(base_sl,
+                                  plots,det_sub_sl,nci_sl))
+#add the inits to VariableNames so rsortie can update the treelist
 sl_variable_names <- treelistDfn(initname = "Init.Dens_", numDigits = 1, 
                                  diamMin = 82, diamMax = 90, diamInc = 2) 
 
-rsortie::makeFiles(lstFiles = lstOfFiles, path_basexmls = My_basePath,
-            path_newxmls = My_newxmlPath, path_newvals= My_newvalsPath,
-            variable_names = sl_variable_names)
+rsortie::makeFiles(lstFiles = lstOfFiles, #use these files
+                   path_basexmls = My_basePath, #location of basefile
+                   path_newxmls = My_newxmlPath, #location of new files created
+                   path_newvals= My_newvalsPath, #location of parameter values
+                   variable_names = sl_variable_names) #variable names to use
 
-# TODO: confirm juvenile growth rate
 
+#2. update each file with cwd starting conditions
 # start with random draw around the mean to create variation in starting CWD:
-cwd_p <- SummitLakeData::cwd_sub_boreal_props(CWD_dat = "./01_data/SBS_cwd_BRogers.csv",
-                                              size_thresh = 15,
+cwd_p <- SummitLakeData::cwd_sub_boreal_props(CWD_dat = cwd_sl,
+                                              size_thresh = 15,#threshold between small and large
                                               out_carbon_comp = TRUE)
 
 parnames <- data.table(pars = c("SpGrp1SmallClass1InitLogProp",
@@ -63,7 +86,7 @@ for(i in 1:length(plots)){
   props_par[, propLog := abs(rnorm(1, mean = propLA, sd = 0.01)), 
              by = seq_len(nrow(props_par))]
   
-  behav_name <- data.table(pars = "DetailedSubstrate14", propLog = NA)
+  behav_name <- data.table(pars = substrate_loc_sl, propLog = NA)
   props_pars <- rbind(behav_name, props_par[,.(pars,propLog)])
   
   #Drop the column name from column 1
@@ -83,11 +106,10 @@ for(i in 1:length(plots)){
             path_newxmls = My_newxmlPath, path_newvals= My_newvalsPath)
 }
 
-# run for 1 time step first
-files2run <- grep("si_6-logProps",list.files(My_newxmlPath, full.names = TRUE), 
+#3. Run Sortie for Summit Lake for 100 years
+files2run <- grep("si_6-logProps",
+                  list.files(My_newxmlPath, full.names = TRUE), 
                   value = TRUE)
-#files2run <- grep("SBS-s",list.files(My_newxmlPath, full.names = TRUE), 
- #                 value = TRUE)
 
 updateNumYears(files2run, 100)
 
@@ -98,14 +120,8 @@ runSortiePar(files2run, numcores = length(files2run), sortie_loc = 0)
 #ICH---------------------------------------------------------------------------
 in_dir <- file.path("02_init_sortie", "01_date_creek") 
 
-#1. Make Sortie files from initial conditions and specifics to each harvest type
-#2. Apply the harvest
-#3. Update detailed substrate (proportion cwd?)
-#4. open the files and save in Sortie gui (file does not compress properly with harvest update)
+#1. Make Sortie files from initial conditions and specifics to each harvest type -----
  
-My_basePath <- paste0(in_dir,"/ParameterFiles/BaseFiles/") 
-My_newxmlPath <- paste0(in_dir,"/ParameterFiles/") 
-My_newvalsPath <- paste0(in_dir,"/ParameterValues/") 
 
 TreatType <- c("CC","HR","LR","NH")
 for(tt in 1:length(TreatType)){
@@ -123,11 +139,7 @@ for(tt in 1:length(TreatType)){
             path_newxmls = My_newxmlPath, path_newvals= My_newvalsPath)
 }
 
-#2. Update the harvests - retained deciduous and brushing
-#-----------------------------------------------------------------------------------
-Units_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/UnitBoundaries/"
-Gaps_path <- "../DateCreekData_NotFunctionsYet/data-raw/Harvests_Plants/GapCutsDateCreek/"
-
+#2. Update the harvests - retained deciduous and brushing --------
 file_names <- list.files(My_newxmlPath, pattern = ".xml")
 
 DateCreekData::apply_harvest(NewxmlPath = My_newxmlPath, Units_path = Units_path, 
@@ -136,14 +148,11 @@ DateCreekData::apply_harvest(NewxmlPath = My_newxmlPath, Units_path = Units_path
 
 
 #3. Update detailed substrate (by unit) -------------------------------------------
-
-cwd_init <- DateCreekData::CWD_1992_props(dat_loc = "D:/Github/DateCreekData/data-raw/CWD/")
-cwd_92 <- file.path("D:/Github/DateCreekData/data-raw/CWD/","CWD_1992.csv")
+cwd_init <- DateCreekData::CWD_1992_props(dat_loc = cwd_init_dc)
 diams_92 <- DateCreekData::CWD_1992_diams(cwd_92) #I think these are identical functions - can make generic
-
-cwd_post_harvest <- CWD_1993_props(dat_loc = "D:/Github/DateCreekData/data-raw/CWD/")
-cwd_93 <- file.path("D:/Github/DateCreekData/data-raw/CWD/","CWD_1993.csv")
+cwd_post_harvest <- DateCreekData::CWD_1993_props(dat_loc = cwd_post_dc)
 diams_93 <- DateCreekData::CWD_1993_diams(cwd_93)
+
 
 parnames <- data.table(pars = c("SpGrp1LargeClass1InitLogProp","SpGrp1LargeClass2InitLogProp",
                                 "SpGrp1LargeClass3InitLogProp","SpGrp1LargeClass4InitLogProp",
@@ -381,7 +390,7 @@ for(i in 1:length(DateCreekData::Treatments$Unit)){
             path_newxmls = My_newxmlPath, path_newvals= My_newvalsPath)
 }
 
-
+#4. Run Sortie
 files2run <- list.files(My_newxmlPath, full.names = TRUE, pattern = "logProps")
 updateNumYears(files2run, 100)
 
