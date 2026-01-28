@@ -119,6 +119,14 @@ M_trees_dc_sa <- tree_dt[Type != "Seedling"]
 M_trees_dc_sa <- treeCalcs::sortie_tree_carbon(sortie_outputs = M_trees_dc_sa, 
                                             BEC = "ICH",
                                             ht_from_diam = "standard")
+#2b. - try different allometries
+units_cc <- DateCreekData::Treatments[Treatment == "CC"]$Unit
+
+M_trees_dc_sa <- treeCalcs::sortie_tree_carbon(sortie_outputs = M_trees_dc_sa[], 
+                                               BEC = "ICH",
+                                               ht_from_diam = "standard")
+
+
 
 M_trees_dc_sdls <- tree_dt[Type == "Seedling"]
 M_trees_dc_sdls[, Species:= ifelse(tree_species == "Western_redcedar", "Cw",

@@ -250,6 +250,14 @@ ggplot(F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" & Tree.Class <3 & Spp == "P
 
 F_trees_dc[, Treatment := factor(Treatment, 
                                  levels = c("NH", "LR", "HR","CC"))]
+
+#remove the pre-harvest trees from the no retention treatment:
+F_trees_dc_cc <- F_trees_dc[Treatment == "CC" & Year != 1992]
+F_trees_dc_nocc <- F_trees_dc[Treatment != "CC"]
+
+F_trees_dc <- rbind(F_trees_dc_cc, F_trees_dc_nocc)
+F_trees_dc <- F_trees_dc[Treatment !="CC"]
+
 #with the plantation and residual allom applied:
 ggplot()+
   geom_point(aes(x = Height, y = cruise_hgt, 
