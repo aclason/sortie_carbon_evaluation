@@ -80,27 +80,44 @@ ggsave(filename = "SBS_cwd_fit.png",width = 7.91, height = 5.61,
 
 #2. Statistics ----------------------------------------------------------
 years <- c(2020, "All Years")
+
 results <- lapply(years, function(year) {
-  data <- select_years(year,meas_obs = MgHa_obs, meas_pred = MgHa_pred,
+  data <- select_years(year,
+                       meas_obs = MgHa_obs,
+                       meas_pred = MgHa_pred,
                        data = MF_cwd_sl)
-  sapply(stat_functions, function(f) f(data))
+  
+  # Call your evaluate_model function
+  evaluate_model(obs = data$obs, pred = data$pred)
 })
+
 results_df <- do.call(rbind, results)
 results_df <- data.frame(Year = years, results_df)
 results_df
 results <- as.data.table(lapply(results_df, function(col) {
   if (all(sapply(col, length) == 1)) unlist(col) else col
 }))
-results[, f_test := NULL]
 
 t.test(MF_cwd_sl[Year == 2020]$MgHa_obs,
        MF_cwd_sl[Year == 2020]$MgHa_pred)
 
-tost(x = MF_cwd_sl[Year == 2020]$MgHa_obs, 
-     y = MF_cwd_sl[Year == 2020]$MgHa_pred,
-     epsilon = 0.7,
-     paired = FALSE,
-     conf.level = 0.95) # 10% of the mean observed
+equivalence_bounds <- c(0.01,0.05, 0.10, 0.15, 0.18, 0.2, 0.25, 0.3,
+                        0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
+# Subset data for the specific year
+yr_subset <- MF_cwd_sl[Year == 2020, ]
+
+# Calculate the mean of observed values for the species
+#mean_obs <- mean(yr_subset$MgHa_obs)
+
+# Loop through each equivalence bound and calculate the TOST p-value
+tost_results <- combined_tost(
+  obs = yr_subset$MgHa_obs,
+  pred = yr_subset$MgHa_pred,
+  bias_bounds = equivalence_bounds,       
+  slope_margins = equivalence_bounds
+)
+
+tost_results
 
 MFD_trees_summary <- MF_cwd_sl %>%
   group_by(Year) %>%
@@ -201,76 +218,73 @@ ggplot()+
 years <- c(1992, 1993, 2011, 2019, "All Years")
 
 results <- lapply(years, function(year) {
-  data <- select_years(year,meas_obs = MgHa_obs, meas_pred = MgHa_pred,
+  data <- select_years(year,
+                       meas_obs = MgHa_obs,
+                       meas_pred = MgHa_pred,
                        data = MF_cwd_dc)
-  sapply(stat_functions, function(f) f(data))
+  
+  # Call your evaluate_model function
+  evaluate_model(obs = data$obs, pred = data$pred)
 })
+
 results_df <- do.call(rbind, results)
 results_df <- data.frame(Year = years, results_df)
 results_df
 results <- as.data.table(lapply(results_df, function(col) {
   if (all(sapply(col, length) == 1)) unlist(col) else col
 }))
-results[, f_test := NULL]
+#results[, f_test := NULL]
 
-t.test(MF_cwd_dc[Year == 2019]$MgHa_obs,
-       MF_cwd_dc[Year == 2019]$MgHa_pred)
-
-tost(x = MF_cwd_dc[Year == 2019]$MgHa_obs, 
-     y = MF_cwd_dc[Year == 2019]$MgHa_pred,
-     epsilon = 0.18,
-     paired = FALSE,
-     conf.level = 0.95) # 10% of the mean observed
-
-MFD_cwd_summary <- MF_cwd_dc %>%
-  group_by(Year) %>%
-  summarise(
-    MgHa_obs_mean = mean(MgHa_obs, na.rm = TRUE),
-    MgHa_obs_sd   = sd(MgHa_obs, na.rm = TRUE),
-    MgHa_pred_mean = mean(MgHa_pred, na.rm = TRUE),
-    MgHa_pred_sd   = sd(MgHa_pred, na.rm = TRUE)
-  )
-
-# Define the equivalence bounds as percentages of the mean observed value
-equivalence_bounds <- c(0.05, 0.10, 0.15, 0.17, 0.2, 0.25, 0.3,
-                        0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
-
-# Subset data for the specific year
-yr_subset <- MF_cwd_dc[Year == 2019, ]
-
-# Calculate the mean of observed values for the species
-mean_obs <- mean(yr_subset$MgHa_obs)
-
-# Loop through each equivalence bound and calculate the TOST p-value
-results_table <- data.table(
-  Bound_Percentage = equivalence_bounds,
-  Bound_Value = equivalence_bounds * mean_obs,
-  TOST_p_value = sapply(equivalence_bounds, function(bound) {
-    tost_result <- equi_result(
-      yr_subset$MgHa_obs,
-      yr_subset$MgHa_pred,
-      mean_obs * bound
-    )
-    round(tost_result$tost.p.value, 2)
-  })
-)
-
-results_table
-MFD_cwd_summary <- merge(results[Year != "All Years",.(Year = as.numeric(Year), Bias, RMSE, R_squared)], 
-                         MFD_cwd_summary, by = c("Year"))
-MFD_cwd_summary[, per_bias := round((Bias/MgHa_obs_mean)*100,0)]
-MFD_cwd_summary[, Ecosystem := "ICH"]
-final_table <- MFD_cwd_summary[, .(
+MFL_trees_summary <- MF_cwd_dc[, .(
+  MgHa_pred_mean = mean(MgHa_pred, na.rm = TRUE),
+  MgHa_pred_sd   = sd(MgHa_pred, na.rm = TRUE),
+  MgHa_obs_mean  = mean(MgHa_obs, na.rm = TRUE),
+  MgHa_obs_sd    = sd(MgHa_obs, na.rm = TRUE)
+), by = .(Year)]
+MFL_trees_summary <- merge(results[Year != "All Years",.(Year = as.numeric(Year), 
+                                                         bias, rmse, cohen_d,
+                                                         r2_1to1,
+                                                         r2_correlation)], 
+                           MFL_trees_summary, by = c("Year"))
+MFL_trees_summary[, per_bias := round((bias/MgHa_obs_mean)*100,0)]
+MFL_trees_summary[, Ecosystem := "ICH"]
+final_table <- MFL_trees_summary[, .(
   Ecosystem,
   Year,
-  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(Bias, 2), per_bias),
-  RMSE = round(RMSE, 2),
-  R2 = round(R_squared, 2),
+  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(bias, 2), per_bias),
+  RMSE = round(rmse, 2),
+  D = round(cohen_d,2),
+  R2 = round(r2_1to1, 2),
+  R2_cor = round(r2_correlation,2),
   `Mean ± (SD) predicted MgHa` = paste0(round(MgHa_pred_mean, 1),
                                         " ± (", round(MgHa_pred_sd, 1), ")"),
   `Mean ± (SD) observed MgHa` = paste0(round(MgHa_obs_mean, 1),
                                        " ± (", round(MgHa_obs_sd, 1), ")")
 )]
+# ---------------
+final_table #Table 2 Live Carbon - ICH
+
+# Define the equivalence bounds as percentages of the mean observed value
+t.test(MF_cwd_dc[Year == 2019]$MgHa_obs,
+       MF_cwd_dc[Year == 2019]$MgHa_pred)
+
+equivalence_bounds <- c(0.01,0.05, 0.10, 0.15, 0.18, 0.2, 0.25, 0.3,
+                        0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
+# Subset data for the specific year
+yr_subset <- MF_cwd_dc[Year == 2019, ]
+
+# Calculate the mean of observed values for the species
+#mean_obs <- mean(yr_subset$MgHa_obs)
+
+# Loop through each equivalence bound and calculate the TOST p-value
+tost_results <- combined_tost(
+  obs = yr_subset$MgHa_obs,
+  pred = yr_subset$MgHa_pred,
+  bias_bounds = equivalence_bounds,       
+  slope_margins = equivalence_bounds
+)
+
+tost_results
 
 
 # Figure 9 ----------------------------------------------------------------------------------------
