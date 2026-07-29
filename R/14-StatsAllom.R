@@ -56,14 +56,20 @@ select_sp_h <- function(sp, data) {
   list(obs = obs, pred = pred, n_value = n_value)
 }
 n_vals <-  F_trees_sl[!is.na(meas_hgt) & Class <3, .N, by = "Species"]
-sp <- unique(F_trees_sl[!is.na(meas_hgt) & Class <3]$Species)
-results <- lapply(sp, function(sp) {
-  data <- select_sp_h(sp, data =  F_trees_sl[!is.na(meas_hgt) & Class <3])
-  sapply(stat_functions, function(f) f(data))
+sp <- c("Bl", "Sx")
+results_h <- lapply(sp, function(sp) {
+  d <- select_sp_h(sp, data = F_trees_sl[!is.na(meas_hgt) & Class < 3])
+  evaluate_model(obs = d$obs, pred = d$pred)
 })
-results_df <- do.call(rbind, results)
-results_df <- data.frame(Species = sp, results_df)
-merge(results_df, n_vals, by.x = "Species", by.y = "Species")
+names(results_h) <- sp
+
+results_df <- do.call(rbind, results_h)
+results_df <- data.frame(Year = years, results_df)
+results_df
+results <- as.data.table(lapply(results_df, function(col) {
+  if (all(sapply(col, length) == 1)) unlist(col) else col
+}))
+
 
 rsquared(F_trees_sl[!is.na(meas_hgt) & Class <3 & Species == "Bl" & Treatment == "light/no"]$meas_hgt,
          F_trees_sl[!is.na(meas_hgt) & Class <3 & Species == "Bl"& Treatment == "light/no"]$Height)
@@ -143,26 +149,26 @@ MSL_trees_sl_sp_sum <- Rmisc::summarySE(MSL_trees_sl_sp,
 MSL_trees_sl_sp_sum <- data.table(MSL_trees_sl_sp_sum)
 
 results <- lapply(years, function(year) {
-  data <- select_years(year,meas_obs = BAHa_obs, meas_pred = BAHa_pred,
-                       data = MFL_trees_sl)
-  sapply(stat_functions, function(f) f(data))
+  d <- select_years(year, meas_obs = BaHa_obs, meas_pred = BaHa_pred,
+                    data = MFL_trees_sl)
+  evaluate_model(obs = d$obs, pred = d$pred)
 })
-results_df <- do.call(rbind, results)
-results_df <- data.frame(Year = years, results_df)
-results_df
-results <- as.data.table(lapply(results_df, function(col) {
-  if (all(sapply(col, length) == 1)) unlist(col) else col
-}))
-results[, f_test := NULL]
+names(results) <- years
 
-t.test(MFL_trees_sl[Year == 2019]$BAHa_obs,
-       MFL_trees_sl[Year == 2019]$BAHa_pred)
+# Convert to data.table
+results_dt <- rbindlist(lapply(names(results), function(yr) {
+  as.data.table(results[[yr]])[, Year := yr]
+}))
+results_dt
+
+t.test(MFL_trees_sl[Year == 2019]$BaHa_obs,
+       MFL_trees_sl[Year == 2019]$BaHa_pred)
 
 MFL_trees_summary <- MFL_trees_sl[, .(
-  BaHa_pred_mean = mean(BAHa_pred, na.rm = TRUE),
-  BaHa_pred_sd   = sd(BAHa_pred, na.rm = TRUE),
-  BaHa_obs_mean  = mean(BAHa_obs, na.rm = TRUE),
-  BaHa_obs_sd    = sd(BAHa_obs, na.rm = TRUE)
+  BaHa_pred_mean = mean(BaHa_pred, na.rm = TRUE),
+  BaHa_pred_sd   = sd(BaHa_pred, na.rm = TRUE),
+  BaHa_obs_mean  = mean(BaHa_obs, na.rm = TRUE),
+  BaHa_obs_sd    = sd(BaHa_obs, na.rm = TRUE)
 ), by = .(Year)]
 MFL_trees_summary <- merge(results[Year != "All Years",.(Year = as.numeric(Year), Bias, RMSE, R_squared)], 
                            MFL_trees_summary, by = "Year")
@@ -185,30 +191,19 @@ final_table
 # ---------------
 
 #species - year combo
-sp <- c("Bl","Sx")
+sp <- c("Bl", "Sx")
 years <- c(1992, 1994, 1997, 2009, 2019)
 MF_trees_sl_sp[is.na(BaHa_pred), BaHa_pred := 0]
 
-select_sp_yr <- function(sp, year, data) {
-  obs <- data[data$Species == sp & data$Year == year, ]$BaHa_obs
-  pred <- data[data$Species == sp & data$Year == year, ]$BaHa_pred
-  n_value <- nrow(data[data$Species == sp, ])
-  list(obs = obs, pred = pred, n_value = n_value)
-}
+results_sp_yr <- rbindlist(lapply(sp, function(s) {
+  rbindlist(lapply(years, function(year) {
+    d <- select_sp_yr(s, year, data = MF_trees_sl_sp)
+    result <- evaluate_model(obs = d$obs, pred = d$pred)
+    as.data.table(result)[, `:=`(Species = s, Year = year)]
+  }))
+}))
+results_sp_yr
 
-results <- do.call(rbind, lapply(sp, function(sp) {
-  data.frame(do.call(rbind, lapply(years, function(year) {
-    data <- select_sp_yr(sp, year, data = MF_trees_sl_sp)
-    stats <- sapply(stat_functions, function(f) f(data))
-    c(Species = sp, Year = year, stats)
-  })))
-}))
-numeric_columns <- colnames(results)[-which(colnames(results) %in% c("Species"))] # All except "Species"
-#results[numeric_columns] <- lapply(results[numeric_columns], as.numeric)
-results <- as.data.table(lapply(results, function(col) {
-  if (all(sapply(col, length) == 1)) unlist(col) else col
-}))
-results[, f_test := NULL]
 MFL_trees_summary <- MF_trees_sl_sp[, .(
   BaHa_pred_mean = mean(BaHa_pred, na.rm = TRUE),
   BaHa_pred_sd   = sd(BaHa_pred, na.rm = TRUE),
