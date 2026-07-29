@@ -368,51 +368,16 @@ MSL_trees_dc_sp_sum <- data.table(MSL_trees_dc_sp_sum)
 # Goodness of fit
 years <- c(1992, 1993, 2010, 2018, 2022, "All Years")
 
-results <- lapply(years, function(year) {
-  data <- select_years(year,meas_obs = BAHa_obs, meas_pred = BAHa_pred,
-                       data = MFL_trees_dc)
-  sapply(stat_functions, function(f) f(data))
-})
-results_df <- do.call(rbind, results)
-results_df <- data.frame(Year = years, results_df)
-results_df
-results <- as.data.table(lapply(results_df, function(col) {
-  if (all(sapply(col, length) == 1)) unlist(col) else col
+results <- rbindlist(lapply(years, function(year) {
+  d <- select_years(year, meas_obs = BAHa_obs, meas_pred = BAHa_pred,
+                    data = MFL_trees_dc)
+  as.data.table(evaluate_model(obs = d$obs, pred = d$pred))[, Year := year]
 }))
-results[, f_test := NULL]
+results
 
 #is there a significant difference between predicted and observed by 2022?
-equi_result(MFL_trees_dc[Year == 2022]$MgHa_obs, 
-            MFL_trees_dc[Year == 2022]$MgHa_pred, 14) # 10% of the mean observed
-equi_boot(MFL_trees_dc$MgHa_obs,
-          MFL_trees_dc$MgHa_pred, n_bootstraps = 10000, eq_margin = 14)
 t.test(FSL_trees_dc[Year == 2022]$BAHa, 
        MSL_trees_dc[Year == 2022]$BAHa) #not diff
-summary(lm(MgHa_pred ~ MgHa_obs, MFL_trees_dc))
-
-equivalence_bounds <- c(0.01,0.05, 0.10, 0.15, 0.18, 0.2, 0.25, 0.3,
-                        0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
-# Subset data for the specific year
-yr_subset <- MFL_trees_dc[Year == 2022, ]
-
-# Calculate the mean of observed values for the species
-mean_obs <- mean(yr_subset$MgHa_obs)
-
-# Loop through each equivalence bound and calculate the TOST p-value
-results_table <- data.table(
-  Bound_Percentage = equivalence_bounds,
-  Bound_Value = equivalence_bounds * mean_obs,
-  TOST_p_value = sapply(equivalence_bounds, function(bound) {
-    tost_result <- equi_result(
-      yr_subset$MgHa_obs,
-      yr_subset$MgHa_pred,
-      mean_obs * bound
-    )
-    round(tost_result$tost.p.value, 2)
-  })
-)
-
-results_table
 
 MFL_trees_summary <- MFL_trees_dc[, .(
   BaHa_pred_mean = mean(BAHa_pred, na.rm = TRUE),
@@ -420,16 +385,17 @@ MFL_trees_summary <- MFL_trees_dc[, .(
   BaHa_obs_mean  = mean(BAHa_obs, na.rm = TRUE),
   BaHa_obs_sd    = sd(BAHa_obs, na.rm = TRUE)
 ), by = .(Year)]
-MFL_trees_summary <- merge(results[Year != "All Years",.(Year = as.numeric(Year), Bias, RMSE, R_squared)], 
+MFL_trees_summary <- merge(results[Year != "All Years",.(Year = as.numeric(Year), 
+                                                         bias, rmse, r2_1to1)], 
                            MFL_trees_summary, by = c("Year"))
-MFL_trees_summary[, per_bias := round((Bias/BaHa_obs_mean)*100,0)]
+MFL_trees_summary[, per_bias := round((bias/BaHa_obs_mean)*100,0)]
 MFL_trees_summary[, Ecosystem := "ICH"]
 final_table <- MFL_trees_summary[, .(
   Ecosystem,
   Year,
-  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(Bias, 2), per_bias),
-  RMSE = round(RMSE, 2),
-  R2 = round(R_squared, 2),
+  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(bias, 2), per_bias),
+  RMSE = round(rmse, 2),
+  R2 = round(r2_1to1, 2),
   `Mean ± (SD) predicted MgHa` = paste0(round(BaHa_pred_mean, 1),
                                         " ± (", round(BaHa_pred_sd, 1), ")"),
   `Mean ± (SD) observed MgHa` = paste0(round(BaHa_obs_mean, 1),
@@ -452,17 +418,13 @@ select_sp_yr <- function(sp, year, data) {
 }
 
 
-results <- do.call(rbind, lapply(sp, function(sp) {
-  data.frame(do.call(rbind, lapply(years, function(year) {
-    data <- select_sp_yr(sp, year, data = MF_trees_dc_sp)
-    stats <- sapply(stat_functions, function(f) f(data))
-    c(Species = sp, Year = year, stats)
-  })))
+results <- rbindlist(lapply(sp, function(s) {
+  rbindlist(lapply(years, function(year) {
+    d <- select_sp_yr(s, year, data = MF_trees_dc_sp)
+    as.data.table(evaluate_model(obs = d$obs, pred = d$pred))[, `:=`(Species = s, Year = year)]
+  }))
 }))
-results <- as.data.table(lapply(results, function(col) {
-  if (all(sapply(col, length) == 1)) unlist(col) else col
-}))
-results[, f_test := NULL]
+results
 MFL_trees_summary <- MF_trees_dc_sp[, .(
   BaHa_pred_mean = mean(BAHa_pred, na.rm = TRUE),
   BaHa_pred_sd   = sd(BAHa_pred, na.rm = TRUE),
@@ -470,17 +432,17 @@ MFL_trees_summary <- MF_trees_dc_sp[, .(
   BaHa_obs_sd    = sd(BAHa_obs, na.rm = TRUE)
 ), by = .(Year, Species)]
 
-MFL_trees_summary <- merge(results[,.(Species, Year, Bias, RMSE, R_squared)], 
+MFL_trees_summary <- merge(results[,.(Species, Year, bias, rmse, r2_1to1)], 
                            MFL_trees_summary, by = c("Species","Year"))
-MFL_trees_summary[, per_bias := round((Bias/BaHa_obs_mean)*100,0)]
+MFL_trees_summary[, per_bias := round((bias/BaHa_obs_mean)*100,0)]
 MFL_trees_summary[, Ecosystem := "ICH"]
 final_table <- MFL_trees_summary[, .(
   Ecosystem,
   Species,
   Year,
-  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(Bias, 2), per_bias),
-  RMSE = round(RMSE, 2),
-  R2 = round(R_squared, 2),
+  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(bias, 2), per_bias),
+  RMSE = round(rmse, 2),
+  R2 = round(r2_1to1, 2),
   `Mean ± (SD) predicted MgHa` = paste0(round(BaHa_pred_mean, 1),
                                         " ± (", round(BaHa_pred_sd, 1), ")"),
   `Mean ± (SD) observed MgHa` = paste0(round(BaHa_obs_mean, 1),
@@ -608,65 +570,25 @@ select_sp_h <- function(sp, data) {
   list(obs = obs, pred = pred, n_value = n_value)
 }
 
-#CC
-n_vals <- F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                     & Tree.Class <3 & Treatment == "CC", .N, by = "Spp"]
-sp <- unique(F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                        & Tree.Class <3 & Treatment == "CC"]$Spp)
-results <- lapply(sp, function(sp) {
-  data <- select_sp_h(sp, data = F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                                            & Tree.Class <3 & Treatment == "CC"])
-  sapply(stat_functions, function(f) f(data))
-})
-results_df <- do.call(rbind, results)
-results_df <- data.frame(Species = sp, results_df)
-results_df
+treatments <- c("CC", "HR", "LR", "NH")
+base_filter <- quote(!is.na(cruise_hgt) & StubYN == "N" & Tree.Class < 3)
 
-#HR
-n_vals <- F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                     & Tree.Class <3 & Treatment == "HR", .N, by = "Spp"]
-sp <- unique(F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                        & Tree.Class <3 & Treatment == "HR"]$Spp)
-results <- lapply(sp, function(sp) {
-  data <- select_sp_h(sp, data = F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                                            & Tree.Class <3 & Treatment == "HR"])
-  sapply(stat_functions, function(f) f(data))
-})
-results_df <- do.call(rbind, results)
-results_df <- data.frame(Species = sp, results_df)
-results_df
+results_h_treatment <- rbindlist(lapply(treatments, function(trt) {
+  dat <- F_trees_dc[eval(base_filter) & Treatment == trt]
+  sp <- unique(dat$Spp)
+  n_vals <- dat[, .N, by = "Spp"]
+  
+  rbindlist(lapply(sp, function(s) {
+    d <- select_sp_h(s, data = dat)
+    as.data.table(evaluate_model(obs = d$obs, pred = d$pred))[, `:=`(Species = s, Treatment = trt)]
+  }))
+}))
+results_h_treatment
 
-#LR
-n_vals <- F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                     & Tree.Class <3 & Treatment == "LR", .N, by = "Spp"]
-sp <- unique(F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                        & Tree.Class <3 & Treatment == "LR"]$Spp)
-results <- lapply(sp, function(sp) {
-  data <- select_sp_h(sp, data = F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                                            & Tree.Class <3 & Treatment == "LR"])
-  sapply(stat_functions, function(f) f(data))
-})
-results_df <- do.call(rbind, results)
-results_df <- data.frame(Species = sp, results_df)
-results_df
+comp_allom <- F_trees_dc[, no_adj := F_trees_dc_no$Height]
 
-#NH
-n_vals <- F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                     & Tree.Class <3 & Treatment == "NH", .N, by = "Spp"]
-sp <- unique(F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                        & Tree.Class <3 & Treatment == "NH"]$Spp)
-results <- lapply(sp, function(sp) {
-  data <- select_sp_h(sp, data = F_trees_dc[!is.na(cruise_hgt) & StubYN == "N" 
-                                            & Tree.Class <3 & Treatment == "NH"])
-  sapply(stat_functions, function(f) f(data))
-})
-results_df <- do.call(rbind, results)
-results_df <- data.frame(Species = sp, results_df)
-results_df
 
-comp_allom <-  F_trees_dc[, no_adj := F_trees_dc_no$Height]
-
-#how different are they?
+#how different are they when you adjust versus leave them as standard allometry?
 ggplot(comp_allom)+
   geom_point(aes(x = no_adj, y = Height, color = Treatment))
 
