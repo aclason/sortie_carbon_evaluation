@@ -24,7 +24,7 @@ FSL_trees_dc <- readRDS(file.path(in_path,"FSL_trees_dc.RDS"))
 # SBS ------
 MSL_trees_sl[,`:=`(Unit = as.factor(Unit),
                    TSH = Year - 1992)]
-model1 <- lmer(MgHa ~ Treatment * TSH + (1 | Unit), 
+model1 <- lmer(MgHa ~ Treatment * TSH + (TSH| Unit), 
                data = MSL_trees_sl)
 anova(model1)
 #when do they converge - Post-hoc comparisons at each year
