@@ -123,10 +123,10 @@ tree_dt_10 <- DateCreekData::trees_2010(lrg_trees = dat_lrg_2010,
                                         snag_heights = dat_snag_hgt_2010,
                                         measured_heights2022 = dat_2022,
                                         calc_height = TRUE,
-                                        use_standard = FALSE, #TRUE = standard, FALSE = residual 
+                                        use_standard = TRUE, #TRUE = standard, FALSE = residual 
                                         id_gap_trees = TRUE, #use gaps to trigger plantation allom
-                                        use_size = TRUE, #use tree size to trigger plantation allom
-                                        use_cc = TRUE, #use cc to trigger plantation allom
+                                        use_size = FALSE, #use tree size to trigger plantation allom
+                                        use_cc = FALSE, #use cc to trigger plantation allom
                                         planted_hgt = 20,
                                         planted_diam = 20,
                                         sp_plant = "Sx")
@@ -141,10 +141,10 @@ tree_dt_18 <- DateCreekData::trees_201x(data_file = dat_2018,
                                         measured_heights2022 = dat_2022,
                                         snag_hgts_18 = dat_snag_hgts_18,
                                         calc_height = TRUE,
-                                        use_standard = FALSE, #TRUE = standard, FALSE = residual
-                                        id_gap_trees = TRUE, #use gaps to trigger plantation allom
-                                        use_size = TRUE, #use tree size to trigger plantation allom
-                                        use_cc = TRUE,#use cc to trigger plantation allom
+                                        use_standard = TRUE, #TRUE = standard, FALSE = residual
+                                        id_gap_trees = FALSE, #use gaps to trigger plantation allom
+                                        use_size = FALSE, #use tree size to trigger plantation allom
+                                        use_cc = FALSE,#use cc to trigger plantation allom
                                         planted_hgt = 20,
                                         planted_diam = 20,
                                         sp_plant = "Sx")
@@ -171,7 +171,7 @@ labs_22 <- data.table(DateCreekData::get_all_plots_22(data_file = dat_2022,
 all_labels <- rbind(labs_92, labs_93, labs_10, labs_1x, labs_22)
 F_trees_dc <- rbind(tree_dt_92, tree_dt_93, tree_dt_10, tree_dt_18, tree_dt_22, fill = TRUE)
 F_trees_dc <- merge(F_trees_dc, DateCreekData::Treatments)
-#saveRDS(F_trees_dc, file.path(out_path, "F_trees_dc.RDS"))
+saveRDS(F_trees_dc, file.path(out_path, "F_trees_dc.RDS"))
 
 # decisions on heights to use -------------------------------------------------------------------
 # 2 trees in 92 that are dead stubs with height 0.
