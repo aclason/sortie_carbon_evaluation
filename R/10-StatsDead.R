@@ -1,5 +1,5 @@
 # A.Clason
-library(equivalence)
+library(TOSTER)
 library(ggplot2)
 library(data.table)
 library(dplyr)
