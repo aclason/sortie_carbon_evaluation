@@ -285,6 +285,64 @@ Crecovery_PC[,.(mn_yrs = mean(NumYears2recovery),
 #SBS: Figure 6A ----
 LineValue_SL <- mean(SL_preharvest$MgHa_pre) #mean of SBS pre-harvest MgHa
 
+MSL_trees_dc[,`:=`(Unit = as.factor(Unit),
+                   TSH = Year - 1992)]
+model1 <- lmer(MgHa ~ Treatment * Year + (1 | Unit), 
+               data = MSL_trees_dc)
+
+TSH_range <- seq(min(MSL_trees_dc$Year), max(MSL_trees_dc$Year), length.out = 100)
+
+preds <- emmeans(model1, ~ Treatment * Year, at = list(TSH = TSH_range),
+                 lmer.df = "satterthwaite") %>%
+  as.data.frame() %>%
+  rename(MgHa = emmean, lower = asymp.LCL, upper = asymp.UCL) %>%
+  mutate(Year = TSH + 1992)
+
+ggplot(NULL,
+       aes(x = Year, y = MgHa, fill = Treatment, group = Treatment)) +
+  geom_ribbon(
+    data = preds,
+    aes(ymin = lower, ymax = upper),
+    alpha = 0.1,
+    linetype = "solid",
+    color = "grey"
+  ) +
+  geom_line(data = preds, aes(col = Treatment), size = 1.2) +
+  scale_colour_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  scale_fill_manual(
+    values = c("#6C4191", "#66BBBB", "#DD4444"),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  coord_cartesian(ylim = c(0, 160), xlim = c(1990, 2087)) +
+  labs(
+    x = "Year",
+    y = "Live carbon (Mg/ha)",
+    col = "Treatment",
+    fill = "Treatment",
+    shape = "Treatment"
+  ) +
+  geom_point(
+    data = FSL_trees_sl,
+    aes(shape = Treatment),
+    size = 1,
+    position = position_dodge(width = 3)
+  ) +
+  scale_shape_manual(
+    values = c(24, 23, 21),
+    breaks = c("light/no", "med", "heavy"),
+    labels = c("High retention", "Medium retention", "Low retention")
+  ) +
+  annotate("segment", x = 1985, xend = 2092, y = LineValue_SL,
+           yend = LineValue_SL, color = "gray", lty = 2, size = 1.2) +
+  theme(legend.position = "bottom")
+
+
+
 ggplot(NULL,
        aes(x = Year, y = MgHa, fill = Treatment, group = Treatment)) +
   geom_line(data = MSL_trees_sl_sum_ty, aes(col = Treatment), size = 1.2) +
