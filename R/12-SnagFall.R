@@ -173,6 +173,7 @@ sl_snagTime_sp <- sl_out_as[UniqXY %in% fallIDs & state_type == "SnFallNext"|
                               UniqXY %in% fallIDs & state_type == "SnagCreate&Fall", 
                             .(Treatment,Unit,Species,DBH,UniqXY,TimeAsSnag)]
 sl_snagTime_sp[, study := "SummitLake"]
+saveRDS(sl_snagTime_sp, file.path("03_out_sortie","sl_snagTime_sp.rds"))
 
 #----------------------------------------------------------------------------------
 #ICH---------------------------------------------------------------------------
@@ -287,8 +288,21 @@ dc_snagTime <- dc_out_as[UniqXY %in% fallIDs & state_type == "SnFallNext"|
 dc_snagTime[, study := "DateCreek"]
 dc_snagTime_sp[,study := "DateCreek"]
 
+saveRDS(dc_snagTime_sp, file.path("03_out_sortie","dc_snagTime_sp.rds"))
+
+
+
+
+
+
+
+
+
 
 # Figures: --------------------------------------------------
+#none of these figures are included in the final paper
+
+
 snag_time <- rbind(sl_snag_time,dc_snagTime)
 snag_time[,.N, by = .(Treatment)]
 
