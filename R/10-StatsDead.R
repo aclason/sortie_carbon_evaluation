@@ -435,82 +435,68 @@ ggsave(filename = "ICH_dead_tr_yr_overtime.png",plot = last_plot(), width = 7.91
 years <- c(1992, 1993, 2010, 2018, 2022, "All Years")
 
 results <- lapply(years, function(year) {
-  data <- select_years(year,meas_obs = MgHa_obs, meas_pred = MgHa_pred,
+  data <- select_years(year,
+                       meas_obs = MgHa_obs,
+                       meas_pred = MgHa_pred,
                        data = MFD_trees_dc)
-  sapply(stat_functions, function(f) f(data))
+  
+  # Call your evaluate_model function
+  evaluate_model(obs = data$obs, pred = data$pred)
 })
+
 results_df <- do.call(rbind, results)
 results_df <- data.frame(Year = years, results_df)
 results_df
 results <- as.data.table(lapply(results_df, function(col) {
   if (all(sapply(col, length) == 1)) unlist(col) else col
 }))
-results[, f_test := NULL]
+#results[, f_test := NULL]
 
-t.test(MFD_trees_dc[Year == 2022]$MgHa_obs,
-       MFD_trees_dc[Year == 2022]$MgHa_pred)
-
-tost(x = MFD_trees_dc[Year == 2022]$MgHa_obs, 
-     y = MFD_trees_dc[Year == 2022]$MgHa_pred,
-     epsilon = 0.9,
-     paired = FALSE,
-     conf.level = 0.95) # 10% of the mean observed
-
-MFD_trees_summary <- MFD_trees_dc %>%
-  group_by(Year) %>%
-  summarise(
-    MgHa_obs_mean = mean(MgHa_obs, na.rm = TRUE),
-    MgHa_obs_sd   = sd(MgHa_obs, na.rm = TRUE),
-    MgHa_pred_mean = mean(MgHa_pred, na.rm = TRUE),
-    MgHa_pred_sd   = sd(MgHa_pred, na.rm = TRUE)
-  )
-
-MSD_trees_sl[, TSH := ifelse(Unit == 4, Year - 1994,
-                             ifelse(Unit == 15, Year - 1994,
-                                    Year - 1992))]
-# Define the equivalence bounds as percentages of the mean observed value
-equivalence_bounds <- c(0.05, 0.10, 0.15, 0.17, 0.2, 0.25, 0.3,
-                        0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
-
-# Subset data for the specific year
-yr_subset <- MFD_trees_sl[Year == 2019, ]
-
-# Calculate the mean of observed values for the species
-mean_obs <- mean(yr_subset$MgHa_obs)
-
-# Loop through each equivalence bound and calculate the TOST p-value
-results_table <- data.table(
-  Bound_Percentage = equivalence_bounds,
-  Bound_Value = equivalence_bounds * mean_obs,
-  TOST_p_value = sapply(equivalence_bounds, function(bound) {
-    tost_result <- equi_result(
-      yr_subset$MgHa_obs,
-      yr_subset$MgHa_pred,
-      mean_obs * bound
-    )
-    round(tost_result$tost.p.value, 2)
-  })
-)
-
-results_table
-
-MFD_trees_summary <- merge(results[Year != "All Years",.(Year = as.numeric(Year), Bias, RMSE, R_squared)], 
+MFD_trees_summary <- MFD_trees_dc[, .(
+  MgHa_pred_mean = mean(MgHa_pred, na.rm = TRUE),
+  MgHa_pred_sd   = sd(MgHa_pred, na.rm = TRUE),
+  MgHa_obs_mean  = mean(MgHa_obs, na.rm = TRUE),
+  MgHa_obs_sd    = sd(MgHa_obs, na.rm = TRUE)
+), by = .(Year)]
+MFD_trees_summary <- merge(results[Year != "All Years",.(Year = as.numeric(Year), 
+                                                         bias, rmse, cohen_d,
+                                                         r2_1to1,
+                                                         r2_correlation)], 
                            MFD_trees_summary, by = c("Year"))
-MFD_trees_summary[, per_bias := round((Bias/MgHa_obs_mean)*100,0)]
+MFD_trees_summary[, per_bias := round((bias/MgHa_obs_mean)*100,0)]
 MFD_trees_summary[, Ecosystem := "ICH"]
 final_table <- MFD_trees_summary[, .(
   Ecosystem,
   Year,
-  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(Bias, 2), per_bias),
-  RMSE = round(RMSE, 2),
-  R2 = round(R_squared, 2),
+  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(bias, 2), per_bias),
+  RMSE = round(rmse, 2),
+  D = round(cohen_d,2),
+  R2 = round(r2_1to1, 2),
+  R2_cor = round(r2_correlation,2),
   `Mean ± (SD) predicted MgHa` = paste0(round(MgHa_pred_mean, 1),
                                         " ± (", round(MgHa_pred_sd, 1), ")"),
   `Mean ± (SD) observed MgHa` = paste0(round(MgHa_obs_mean, 1),
                                        " ± (", round(MgHa_obs_sd, 1), ")")
 )]
+# ---------------
+final_table #Table 2 Dead Carbon - ICH
 
-# ---------------
-final_table
-# ---------------
+t.test(MFD_trees_dc[Year == 2022]$MgHa_obs,
+       MFD_trees_dc[Year == 2022]$MgHa_pred)
+# Define the equivalence bounds as percentages of the mean observed value
+equivalence_bounds <- c(0.05, 0.10, 0.15, 0.17, 0.2, 0.25, 0.3,
+                        0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
+
+# Subset data for the specific year
+yr_subset <- MFD_trees_dc[Year == 2022, ]
+
+# Loop through each equivalence bound and calculate the TOST p-value
+tost_results <- combined_tost(
+  obs = yr_subset$MgHa_obs,
+  pred = yr_subset$MgHa_pred,
+  bias_bounds = equivalence_bounds,       
+  slope_margins = equivalence_bounds
+)
+
+tost_results
 
