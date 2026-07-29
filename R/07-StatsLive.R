@@ -1,5 +1,5 @@
 # A.Clason
-library(equivalence)
+library(TOSTER)
 library(ggplot2)
 library(data.table)
 library(dplyr)
@@ -147,17 +147,22 @@ ggsave(filename = "SBS_live_trees_sp_tr_bl_sx.jpg",
 # Table 2 bias, RMSE, R2, Means -----------------------
 years <- c(1992, 1994, 1997, 2009, 2019, "All Years")
 results <- lapply(years, function(year) {
-  data <- select_years(year,meas_obs = MgHa_obs, meas_pred = MgHa_pred,
+  data <- select_years(year,
+                       meas_obs = MgHa_obs,
+                       meas_pred = MgHa_pred,
                        data = MFL_trees_sl)
-  sapply(stat_functions, function(f) f(data))
+  
+  # Call your evaluate_model function
+  evaluate_model(obs = data$obs, pred = data$pred)
 })
+
 results_df <- do.call(rbind, results)
 results_df <- data.frame(Year = years, results_df)
 results_df
 results <- as.data.table(lapply(results_df, function(col) {
   if (all(sapply(col, length) == 1)) unlist(col) else col
 }))
-results[, f_test := NULL]
+#results[, f_test := NULL]
 
 MFL_trees_summary <- MFL_trees_sl[, .(
   MgHa_pred_mean = mean(MgHa_pred, na.rm = TRUE),
@@ -165,16 +170,21 @@ MFL_trees_summary <- MFL_trees_sl[, .(
   MgHa_obs_mean  = mean(MgHa_obs, na.rm = TRUE),
   MgHa_obs_sd    = sd(MgHa_obs, na.rm = TRUE)
 ), by = .(Year)]
-MFL_trees_summary <- merge(results[Year != "All Years",.(Year = as.numeric(Year), Bias, RMSE, R_squared)], 
+MFL_trees_summary <- merge(results[Year != "All Years",.(Year = as.numeric(Year), 
+                                                         bias, rmse, cohen_d,
+                                                         r2_1to1,
+                                                         r2_correlation)], 
                            MFL_trees_summary, by = c("Year"))
-MFL_trees_summary[, per_bias := round((Bias/MgHa_obs_mean)*100,0)]
+MFL_trees_summary[, per_bias := round((bias/MgHa_obs_mean)*100,0)]
 MFL_trees_summary[, Ecosystem := "SBS"]
 final_table <- MFL_trees_summary[, .(
   Ecosystem,
   Year,
-  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(Bias, 2), per_bias),
-  RMSE = round(RMSE, 2),
-  R2 = round(R_squared, 2),
+  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(bias, 2), per_bias),
+  RMSE = round(rmse, 2),
+  D = round(cohen_d,2),
+  R2 = round(r2_1to1, 2),
+  R2_cor = round(r2_correlation,2),
   `Mean ± (SD) predicted MgHa` = paste0(round(MgHa_pred_mean, 1),
                                         " ± (", round(MgHa_pred_sd, 1), ")"),
   `Mean ± (SD) observed MgHa` = paste0(round(MgHa_obs_mean, 1),
@@ -193,66 +203,72 @@ equivalence_bounds <- c(0.01,0.05, 0.10, 0.15, 0.18, 0.2, 0.25, 0.3,
 yr_subset <- MFL_trees_sl[Year == 2019, ]
 
 # Calculate the mean of observed values for the species
-mean_obs <- mean(yr_subset$MgHa_obs)
+#mean_obs <- mean(yr_subset$MgHa_obs)
 
 # Loop through each equivalence bound and calculate the TOST p-value
-results_table <- data.table(
-  Bound_Percentage = equivalence_bounds,
-  Bound_Value = equivalence_bounds * mean_obs,
-  TOST_p_value = sapply(equivalence_bounds, function(bound) {
-    tost_result <- equi_result(
-      yr_subset$MgHa_obs,
-      yr_subset$MgHa_pred,
-      mean_obs * bound
-    )
-    round(tost_result$tost.p.value, 2)
-  })
+tost_results <- combined_tost(
+  obs = yr_subset$MgHa_obs,
+  pred = yr_subset$MgHa_pred,
+  bias_bounds = equivalence_bounds,       
+  slope_margins = equivalence_bounds
 )
 
-results_table
+tost_results
+
+# Apply to each year in your dataset
+tost_table_all_years <- MFL_trees_sl[, year_tost_summary(.SD), by = Year]
+
+# View results
+tost_table_all_years[,.(Year, Bias_Bound_Percent, Bias_Equivalent, Slope_Equiv, t_test_p)]
+
 
 # Table 3 bias, RMSE, R2, Means -----------------------
 #species - year combo
 sp <- c("Bl","Sx")
 years <- c(1992, 1994, 1997, 2009, 2019)
-
-select_sp_yr <- function(sp, year, data) {
-  obs <- data[data$Species == sp & data$Year == year, ]$MgHa_obs
-  pred <- data[data$Species == sp & data$Year == year, ]$MgHa_pred
-  n_value <- nrow(data[data$Species == sp, ])
-  list(obs = obs, pred = pred, n_value = n_value)
-}
-
-results <- do.call(rbind, lapply(sp, function(sp) {
-  data.frame(do.call(rbind, lapply(years, function(year) {
-    data <- select_sp_yr(sp, year, data = MF_trees_sl_sp)
-    stats <- sapply(stat_functions, function(f) f(data))
-    c(Species = sp, Year = year, stats)
-  })))
+results <- do.call(rbind, lapply(sp, function(s) {
+  do.call(rbind, lapply(years, function(y) {
+    
+    # Use your helper function
+    data_list <- select_sp_yr(s, y, MF_trees_sl_sp)
+    
+    # Skip if no data
+    if(length(data_list$obs) == 0) return(NULL)
+    
+    # Run evaluation
+    stats <- evaluate_model(obs = data_list$obs, pred = data_list$pred)
+    
+    # Combine with species and year
+    data.frame(Species = s, Year = y, stats, row.names = NULL)
+  }))
 }))
+
 numeric_columns <- colnames(results)[-which(colnames(results) %in% c("Species"))] # All except "Species"
 #results[numeric_columns] <- lapply(results[numeric_columns], as.numeric)
 results <- as.data.table(lapply(results, function(col) {
   if (all(sapply(col, length) == 1)) unlist(col) else col
 }))
-results[, f_test := NULL]
+#results[, f_test := NULL]
 MFL_trees_summary <- MF_trees_sl_sp[, .(
   MgHa_pred_mean = mean(MgHa_pred, na.rm = TRUE),
   MgHa_pred_sd   = sd(MgHa_pred, na.rm = TRUE),
   MgHa_obs_mean  = mean(MgHa_obs, na.rm = TRUE),
   MgHa_obs_sd    = sd(MgHa_obs, na.rm = TRUE)
 ), by = .(Year, Species)]
-MFL_trees_summary <- merge(results[,.(Species, Year, Bias, RMSE, R_squared)], 
+MFL_trees_summary <- merge(results[,.(Species, Year, bias, rmse,
+                                      cohen_d, r2_1to1, r2_correlation)], 
                            MFL_trees_summary, by = c("Species","Year"))
-MFL_trees_summary[, per_bias := round((Bias/MgHa_obs_mean)*100,0)]
+MFL_trees_summary[, per_bias := round((bias/MgHa_obs_mean)*100,0)]
 MFL_trees_summary[, Ecosystem := "SBS"]
 final_table <- MFL_trees_summary[, .(
   Ecosystem,
   Species,
   Year,
-  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(Bias, 2), per_bias),
-  RMSE = round(RMSE, 2),
-  R2 = round(R_squared, 2),
+  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(bias, 2), per_bias),
+  RMSE = round(rmse, 2),
+  D = round(cohen_d,2),
+  R2 = round(r2_1to1, 2),
+  R2_cor = round(r2_correlation,2),
   `Mean ± (SD) predicted MgHa` = paste0(round(MgHa_pred_mean, 1),
                                         " ± (", round(MgHa_pred_sd, 1), ")"),
   `Mean ± (SD) observed MgHa` = paste0(round(MgHa_obs_mean, 1),
@@ -270,49 +286,53 @@ t.test(MF_trees_sl_sp[Year == 2019 & Species == "Bl"]$MgHa_obs,
 t.test(MF_trees_sl_sp[Year == 2019 & Species == "Sx"]$MgHa_obs,
        MF_trees_sl_sp[Year == 2019 & Species == "Sx"]$MgHa_pred)
 
-species_list <- sp
-equivalence_bounds <- c(0.05, 0.10, 0.15, 0.18, 0.2, 0.25, 0.3,
-                        0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
-mean_sp_obs <- c()
-# Initialize a results table
-results_table <- data.table(
-  Species = character(),
-  Bound_Percentage = equivalence_bounds,
-  Bound_Value = equivalence_bounds * mean_sp_obs,
-  TOST_p_value = numeric(length(equivalence_bounds))
-)
 
-for (species in species_list) {
-  # Subset data for the specific year and species
+species_list <- c("Bl", "Sx")
+equivalence_bounds <- c(0.01,0.05,0.10,0.15,0.18,0.2,0.25,0.3,
+                        0.35,0.4,0.45,0.5,0.55,0.6,0.65)
+
+# Initialize results table
+results_table <- data.table()
+
+for(species in species_list){
+  
+  # Subset data for 2019 & species
   sp_yr_subset <- MF_trees_sl_sp[Year == 2019 & Species == species, ]
   
-  # Calculate the mean of observed values for the species
-  mean_sp_obs <- mean(sp_yr_subset$MgHa_obs)
+  # Skip if no data
+  if(nrow(sp_yr_subset) == 0) next
   
-  # Loop through each equivalence bound and calculate the TOST p-value
-  for (bound in equivalence_bounds) {
-    # Perform TOST
-    tost_result <- equi_result(
-      sp_yr_subset$MgHa_obs,
-      sp_yr_subset$MgHa_pred,
-      mean_sp_obs * bound
-    )
-    
-    # Append the results to the results table
-    results_table <- rbind(
-      results_table,
-      data.table(
-        Species = species,
-        Bound_Percentage = bound,
-        Bound_Value = mean_sp_obs * bound,
-        TOST_p_value = round(tost_result$tost.p.value,2)
-      ),
-      fill = TRUE
-    )
-  }
+  # Perform t-test
+  ttest_res <- t.test(sp_yr_subset$MgHa_obs, sp_yr_subset$MgHa_pred)
+  
+  # Perform TOST for bias and slope
+  tost_res <- combined_tost(
+    obs = sp_yr_subset$MgHa_obs,
+    pred = sp_yr_subset$MgHa_pred,
+    bias_bounds = equivalence_bounds,
+    slope_margins = equivalence_bounds
+  )
+  
+  # Add t-test p-value and species/year info
+  tost_res[, `:=`(
+    Species = species,
+    Year = 2019,
+    t_test_p = ttest_res$p.value
+  )]
+  
+  # Reorder columns for clarity
+  setcolorder(tost_res, c("Species","Year","Bias_Bound_Percent","Bias_Bound","Bias_p",
+                          "Bias_Equivalent","Slope","Slope_CI_Lower","Slope_CI_Upper",
+                          "Slope_Equiv","t_test_p"))
+  
+  # Append to results table
+  results_table <- rbind(results_table, tost_res, fill = TRUE)
 }
-results_table
 
+# View final table
+results_table
+# View results
+results_table[,.(Species, Bias_Bound_Percent, Bias_Equivalent, Slope_Equiv, t_test_p)]
 
 # ICH ----------------------------------------------------------------------------------------
 ## Figures -------------------------------------------
@@ -459,17 +479,22 @@ ggsave(filename = "ICH_live_trees_sp_tr_hw.jpg",
 years <- c(1992, 1993, 2010, 2018, 2022, "All Years")
 
 results <- lapply(years, function(year) {
-  data <- select_years(year,meas_obs = MgHa_obs, meas_pred = MgHa_pred,
+  data <- select_years(year,
+                       meas_obs = MgHa_obs,
+                       meas_pred = MgHa_pred,
                        data = MFL_trees_dc)
-  sapply(stat_functions, function(f) f(data))
+  
+  # Call your evaluate_model function
+  evaluate_model(obs = data$obs, pred = data$pred)
 })
+
 results_df <- do.call(rbind, results)
 results_df <- data.frame(Year = years, results_df)
 results_df
 results <- as.data.table(lapply(results_df, function(col) {
   if (all(sapply(col, length) == 1)) unlist(col) else col
 }))
-results[, f_test := NULL]
+#results[, f_test := NULL]
 
 MFL_trees_summary <- MFL_trees_dc[, .(
   MgHa_pred_mean = mean(MgHa_pred, na.rm = TRUE),
@@ -477,25 +502,29 @@ MFL_trees_summary <- MFL_trees_dc[, .(
   MgHa_obs_mean  = mean(MgHa_obs, na.rm = TRUE),
   MgHa_obs_sd    = sd(MgHa_obs, na.rm = TRUE)
 ), by = .(Year)]
-MFL_trees_summary <- merge(results[Year != "All Years",.(Year = as.numeric(Year), Bias, RMSE, R_squared)], 
+MFL_trees_summary <- merge(results[Year != "All Years",.(Year = as.numeric(Year), 
+                                                         bias, rmse, cohen_d,
+                                                         r2_1to1,
+                                                         r2_correlation)], 
                            MFL_trees_summary, by = c("Year"))
-MFL_trees_summary[, per_bias := round((Bias/MgHa_obs_mean)*100,0)]
+MFL_trees_summary[, per_bias := round((bias/MgHa_obs_mean)*100,0)]
 MFL_trees_summary[, Ecosystem := "ICH"]
 final_table <- MFL_trees_summary[, .(
   Ecosystem,
   Year,
-  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(Bias, 2), per_bias),
-  RMSE = round(RMSE, 2),
-  R2 = round(R_squared, 2),
+  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(bias, 2), per_bias),
+  RMSE = round(rmse, 2),
+  D = round(cohen_d,2),
+  R2 = round(r2_1to1, 2),
+  R2_cor = round(r2_correlation,2),
   `Mean ± (SD) predicted MgHa` = paste0(round(MgHa_pred_mean, 1),
                                         " ± (", round(MgHa_pred_sd, 1), ")"),
   `Mean ± (SD) observed MgHa` = paste0(round(MgHa_obs_mean, 1),
                                        " ± (", round(MgHa_obs_sd, 1), ")")
 )]
+# ---------------
+final_table #Table 2 Live Carbon - ICH
 
-# ---------------
-final_table #Table 2 - Live trees
-# ---------------
 
 # Table 2 T-test and TOST on final year ----------------
 t.test(FSL_trees_dc[Year == 2022]$MgHa, 
@@ -506,24 +535,22 @@ equivalence_bounds <- c(0.01,0.05, 0.10, 0.15, 0.18, 0.2, 0.25, 0.3,
 # Subset data for the specific year
 yr_subset <- MFL_trees_dc[Year == 2022, ]
 
-# Calculate the mean of observed values for the species
-mean_obs <- mean(yr_subset$MgHa_obs)
-
 # Loop through each equivalence bound and calculate the TOST p-value
-results_table <- data.table(
-  Bound_Percentage = equivalence_bounds,
-  Bound_Value = equivalence_bounds * mean_obs,
-  TOST_p_value = sapply(equivalence_bounds, function(bound) {
-    tost_result <- equi_result(
-      yr_subset$MgHa_obs,
-      yr_subset$MgHa_pred,
-      mean_obs * bound
-    )
-    round(tost_result$tost.p.value, 2)
-  })
+tost_results <- combined_tost(
+  obs = yr_subset$MgHa_obs,
+  pred = yr_subset$MgHa_pred,
+  bias_bounds = equivalence_bounds,       
+  slope_margins = equivalence_bounds
 )
 
-results_table
+tost_results
+
+# Apply to each year in your dataset
+tost_table_all_years <- MFL_trees_dc[, year_tost_summary(.SD), by = Year]
+
+# View results
+tost_table_all_years[,.(Year, Bias_Bound_Percent, Bias_Equivalent, Slope_Equiv, t_test_p)]
+
 
 #by species ---------------------------------------------------------------
 # Table 3 bias, RMSE, R2, Means ---------------
@@ -531,21 +558,59 @@ results_table
 sp <- c("Hw","Cw","Ba","Sx","Pl")
 years <- c(1992, 1993, 2010, 2018, 2022)
 
-select_sp_yr <- function(sp, year, data) {
-  obs <- data[data$Species == sp & data$Year == year, ]$MgHa_obs
-  pred <- data[data$Species == sp & data$Year == year, ]$MgHa_pred
-  n_value <- nrow(data[data$Species == sp, ])
-  list(obs = obs, pred = pred, n_value = n_value)
-}
-
-
-results <- do.call(rbind, lapply(sp, function(sp) {
-  data.frame(do.call(rbind, lapply(years, function(year) {
-    data <- select_sp_yr(sp, year, data = MF_trees_dc_sp)
-    stats <- sapply(stat_functions, function(f) f(data))
-    c(Species = sp, Year = year, stats)
-  })))
+results <- do.call(rbind, lapply(sp, function(s) {
+  do.call(rbind, lapply(years, function(y) {
+    
+    # Use your helper function
+    data_list <- select_sp_yr(s, y, MF_trees_dc_sp)
+    
+    # Skip if no data
+    if(length(data_list$obs) == 0) return(NULL)
+    
+    # Run evaluation
+    stats <- evaluate_model(obs = data_list$obs, pred = data_list$pred)
+    
+    # Combine with species and year
+    data.frame(Species = s, Year = y, stats, row.names = NULL)
+  }))
 }))
+
+numeric_columns <- colnames(results)[-which(colnames(results) %in% c("Species"))] # All except "Species"
+#results[numeric_columns] <- lapply(results[numeric_columns], as.numeric)
+results <- as.data.table(lapply(results, function(col) {
+  if (all(sapply(col, length) == 1)) unlist(col) else col
+}))
+#results[, f_test := NULL]
+MFL_trees_summary <- MF_trees_dc_sp[, .(
+  MgHa_pred_mean = mean(MgHa_pred, na.rm = TRUE),
+  MgHa_pred_sd   = sd(MgHa_pred, na.rm = TRUE),
+  MgHa_obs_mean  = mean(MgHa_obs, na.rm = TRUE),
+  MgHa_obs_sd    = sd(MgHa_obs, na.rm = TRUE)
+), by = .(Year, Species)]
+MFL_trees_summary <- merge(results[,.(Species, Year, bias, rmse,
+                                      cohen_d, r2_1to1, r2_correlation)], 
+                           MFL_trees_summary, by = c("Species","Year"))
+MFL_trees_summary[, per_bias := round((bias/MgHa_obs_mean)*100,0)]
+MFL_trees_summary[, Ecosystem := "ICH"]
+final_table <- MFL_trees_summary[, .(
+  Ecosystem,
+  Species,
+  Year,
+  `Bias – MgHa (% of mean)` = sprintf("%.2f (%.0f %%)", round(bias, 2), per_bias),
+  RMSE = round(rmse, 2),
+  D = round(cohen_d,2),
+  R2 = round(r2_1to1, 2),
+  R2_cor = round(r2_correlation,2),
+  `Mean ± (SD) predicted MgHa` = paste0(round(MgHa_pred_mean, 1),
+                                        " ± (", round(MgHa_pred_sd, 1), ")"),
+  `Mean ± (SD) observed MgHa` = paste0(round(MgHa_obs_mean, 1),
+                                       " ± (", round(MgHa_obs_sd, 1), ")")
+)]
+
+# ---------------
+final_table #Table 3 - SBS live by species
+# ---------------
+
 #numeric_columns <- colnames(results)[-which(colnames(results) %in% c("Species"))] # All except "Species"
 #results[numeric_columns] <- lapply(results[numeric_columns], as.numeric)
 results <- as.data.table(lapply(results, function(col) {
@@ -598,49 +663,50 @@ t.test(MF_trees_dc_sp[Year == 2022 & Species == "Ba"]$MgHa_obs,
 
 # Define the equivalence bounds as percentages of the mean observed value
 species_list <- sp
-equivalence_bounds <- c(0.05, 0.10, 0.15, 0.17, 0.2, 0.25, 0.3,
+equivalence_bounds <- c(0.05, 0.10, 0.15, 0.18, 0.2, 0.25, 0.3,
                         0.35, 0.4, 0.45, 0.5, 0.55,0.6, 0.65)
-mean_sp_obs <- c()
-# Initialize a results table
-results_table <- data.table(
-  Species = character(),
-  Bound_Percentage = equivalence_bounds,
-  Bound_Value = equivalence_bounds * mean_sp_obs,
-  TOST_p_value = numeric(length(equivalence_bounds))
-)
 
-for (species in species_list) {
-  # Subset data for the specific year and species
+results_table <- data.table()
+
+for(species in species_list){
+  
+  # Subset data for 2019 & species
   sp_yr_subset <- MF_trees_dc_sp[Year == 2022 & Species == species, ]
   
-  # Calculate the mean of observed values for the species
-  mean_sp_obs <- mean(sp_yr_subset$MgHa_obs)
+  # Skip if no data
+  if(nrow(sp_yr_subset) == 0) next
   
-  # Loop through each equivalence bound and calculate the TOST p-value
-  for (bound in equivalence_bounds) {
-    # Perform TOST
-    tost_result <- equi_result(
-      sp_yr_subset$MgHa_obs,
-      sp_yr_subset$MgHa_pred,
-      mean_sp_obs * bound
-    )
-    
-    # Append the results to the results table
-    results_table <- rbind(
-      results_table,
-      data.table(
-        Species = species,
-        Bound_Percentage = bound,
-        Bound_Value = mean_sp_obs * bound,
-        TOST_p_value = round(tost_result$tost.p.value,2)
-      ),
-      fill = TRUE
-    )
-  }
+  # Perform t-test
+  ttest_res <- t.test(sp_yr_subset$MgHa_obs, sp_yr_subset$MgHa_pred)
+  
+  # Perform TOST for bias and slope
+  tost_res <- combined_tost(
+    obs = sp_yr_subset$MgHa_obs,
+    pred = sp_yr_subset$MgHa_pred,
+    bias_bounds = equivalence_bounds,
+    slope_margins = equivalence_bounds
+  )
+  
+  # Add t-test p-value and species/year info
+  tost_res[, `:=`(
+    Species = species,
+    Year = 2022,
+    t_test_p = ttest_res$p.value
+  )]
+  
+  # Reorder columns for clarity
+  setcolorder(tost_res, c("Species","Year","Bias_Bound_Percent","Bias_Bound","Bias_p",
+                          "Bias_Equivalent","Slope","Slope_CI_Lower","Slope_CI_Upper",
+                          "Slope_Equiv","t_test_p"))
+  
+  # Append to results table
+  results_table <- rbind(results_table, tost_res, fill = TRUE)
 }
+
+# View final table
 results_table
-
-
+# View results
+results_table[,.(Species, Bias_Bound_Percent, Bias_Equivalent, Slope_Equiv, t_test_p)]
 # Supplementary Materials 3: Table S2-1 (pine in clearcuts)
 sp <- c("Pl")
 years <- c(1992, 1993, 2010, 2018, 2022)
