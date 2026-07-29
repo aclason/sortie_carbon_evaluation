@@ -85,3 +85,5 @@ Baseline_DC.csv
 02_init_sortie/01_date_creek/ParameterFiles/
 
 02_init_sortie/02_summit_lake/ParameterFiles/
+
+*.rds
